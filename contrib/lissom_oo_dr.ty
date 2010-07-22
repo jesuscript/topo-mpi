@@ -1,0 +1,198 @@
+"""
+A LISSOM-based direction map (with ON/OFF channels).
+
+Under construction: moving away from the '4 eyes' approach.
+
+$Id$
+"""
+__version__='$Revision$'
+
+
+from math import pi, sqrt
+import copy
+import numpy
+
+import param
+
+from topo import learningfn,numbergen,transferfn,pattern,projection,responsefn,sheet 
+
+import topo.learningfn.optimized
+import topo.learningfn.projfn 
+import topo.transferfn.optimized 
+import topo.pattern.random
+import topo.responsefn.optimized 
+import topo.sheet.lissom
+import topo.sheet.optimized
+
+
+# Parameters that can be passed on the command line using -p
+from topo.misc.commandline import global_params as p
+p.add(
+    retina_density=param.Number(default=24.0,bounds=(0,None),
+        inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for the retina."""),
+
+    lgn_density=param.Number(default=24.0,bounds=(0,None),
+        inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for the LGN."""),
+
+    cortex_density=param.Number(default=48.0,bounds=(0,None),
+        inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for V1."""),
+
+    speed=param.Number(default=2.0,bounds=(0,None),doc="""
+        Distance in sheet coordinates between successive frames, when
+        translating patterns."""))
+
+
+
+
+### Specify weight initialization, response function, and learning function
+projection.CFProjection.cf_shape = pattern.Disk(smoothing=0.0)
+projection.CFProjection.weights_generator = pattern.Constant()
+projection.CFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+projection.CFProjection.learning_fn=learningfn.optimized.CFPLF_Hebbian_opt()
+projection.CFProjection.weights_output_fns=[transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
+projection.SharedWeightCFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+
+### Input patterns
+num_inputs=1
+
+
+# Number of separate delay lines in the LGN
+num_lags=4
+input_period=num_lags # By default
+
+
+input = pattern.Translator(
+    x=numbergen.UniformRandom(lbound=-0.75,
+                              ubound=0.75,seed=12),
+    y=numbergen.UniformRandom(lbound=-0.75,
+                              ubound=0.75,seed=34),
+    direction=numbergen.UniformRandom(lbound=-pi,
+                                      ubound=pi,seed=99),
+    generator=pattern.Gaussian(size=0.088388, aspect_ratio=4.66667, scale=1.0,
+                               bounds=sheet.BoundingBox(radius=0.8)),
+    reset_period=input_period,
+    speed=p.speed/p.retina_density)
+
+
+### Sheets
+topo.sim['Retina']=sheet.GeneratorSheet(
+    nominal_density=p.retina_density,period=1.0,phase=0.05,
+    nominal_bounds=sheet.BoundingBox(radius=0.5+0.27083+0.375),
+    input_generator=input)
+
+topo.sim['LGNOn']=sheet.CFSheet(
+    nominal_density=p.lgn_density,
+    nominal_bounds=sheet.BoundingBox(radius=0.5+0.27083),
+    output_fns=[transferfn.PiecewiseLinear(lower_bound=0.0,upper_bound=1.0)],
+    measure_maps=False)
+
+topo.sim['LGNOff']=sheet.CFSheet(
+    nominal_density=p.lgn_density,
+    nominal_bounds=sheet.BoundingBox(radius=0.5+0.27083),
+    output_fns=[transferfn.PiecewiseLinear(lower_bound=0.0,upper_bound=1.0)],
+    measure_maps=False)
+
+topo.sim['V1'] = sheet.lissom.LISSOM(
+    nominal_density=p.cortex_density,
+    nominal_bounds=sheet.BoundingBox(radius=0.5),tsettle=9,
+    output_fns=[transferfn.PiecewiseLinear(lower_bound=0.083,upper_bound=0.633)],
+    joint_norm_fn=sheet.optimized.compute_joint_norm_totals_opt)
+
+
+
+### Connections
+
+strength=[2.33, 2.38, 2.53, 2.8] # 2.33 for speed=0, 2.38 for speed=1, 2.53 for speed=2, 2.8 for speed=3 from CMVC
+
+# DoG weights for the LGN
+centerg   = pattern.Gaussian(size=0.07385,aspect_ratio=1.0,
+                             output_fns=[transferfn.optimized.DivisiveNormalizeL1()])
+surroundg = pattern.Gaussian(size=0.29540,aspect_ratio=1.0,
+                             output_fns=[transferfn.optimized.DivisiveNormalizeL1()])
+
+on_weights = pattern.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = pattern.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+    
+topo.sim.connect('Retina','LGNOn',delay=0.05,
+                 connection_type=projection.SharedWeightCFProjection,strength=strength[int(p.speed)],
+                 nominal_bounds_template=sheet.BoundingBox(radius=0.375),
+                 name='Afferent',weights_generator=on_weights)
+
+topo.sim.connect('Retina','LGNOff',delay=0.05,
+                 connection_type=projection.SharedWeightCFProjection,strength=strength[int(p.speed)],
+                 nominal_bounds_template=sheet.BoundingBox(radius=0.375),
+                 name='Afferent',weights_generator=off_weights)
+
+
+for i in xrange(num_lags):
+
+    topo.sim.connect(
+        'LGNOn','V1',delay=0.05+i,
+        dest_port=('Activity','JointNormalize', 'Afferent'),
+        connection_type=projection.CFProjection,strength=1.0,
+        name='LGNOnAfferent'+str(i),
+        nominal_bounds_template=sheet.BoundingBox(radius=0.27083),
+        learning_rate=0.9590/8,
+        weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083))
+
+    topo.sim.connect(
+        'LGNOff','V1',delay=0.05+i,
+        dest_port=('Activity','JointNormalize', 'Afferent'),
+        connection_type=projection.CFProjection,strength=1.0,
+        name='LGNOffAfferent'+str(i),
+        nominal_bounds_template=sheet.BoundingBox(radius=0.27083),
+        learning_rate=0.9590/8,
+        weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083))
+
+
+
+topo.sim.connect(
+    'V1','V1',delay=0.05,name='LateralExcitatory',
+    connection_type=projection.ResizableCFProjection,strength=0.9,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.10417),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.10417),
+    learning_rate=2.55528) 
+            
+topo.sim.connect(
+    'V1','V1',delay=0.05,name='LateralInhibitory',
+    connection_type=projection.CFProjection,strength=-0.9,
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.22917),
+    nominal_bounds_template=sheet.BoundingBox(radius=0.22917),
+    learning_rate=1.80873)  
+
+
+
+### Actions scheduled to occur as the simulation proceeds.
+sheet.lissom.schedule_events("topo.sim['V1']",st=input_period/num_inputs,aff_name="Afferent")
+
+
+### Default locations for model editor
+topo.sim.grid_layout([[None, 'V1'],
+                      [('LGNOn' ) for i in xrange(num_lags)],
+                      [('LGNOff') for i in xrange(num_lags)],
+                      [('Retina') for i in xrange(num_lags)]],
+                     xstart=150, xstep=300)
+
+
+### Set up appropriate defaults for analysis
+
+# Measure feature maps based on unthresholded initial response for
+# speed and reliability.
+# (CB: may need to update for new motion model)
+from topo.analysis.featureresponses import MeasureResponseCommand
+MeasureResponseCommand.duration=4.0
+MeasureResponseCommand.apply_output_fns=True
+MeasureResponseCommand.scale=0.5 # CB: I set this for the speed-2 network
+
+# CB: temporary (to get new direction map measurement)
+_new_motion_model=True
+
+import topo.command.basic
+topo.command.basic.default_analysis_plotgroups.append("Direction Preference")

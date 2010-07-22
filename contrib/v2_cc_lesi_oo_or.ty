@@ -1,0 +1,14 @@
+"""
+LESI-based orientation map with complex cell layer.
+
+$Id: cc_lissom_oo_or.ty 8265 2008-03-26 17:09:15Z antolikjan $
+"""
+__version__='$Revision: 8265 $'
+
+from topo import command
+
+command.load_snapshot('snapshot.typ');
+
+from contrib.jacommands import AddV2
+
+AddV2()

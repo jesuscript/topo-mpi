@@ -1,0 +1,56 @@
+*** scipy-0.7.1/scipy/weave/catalog.py	2009-09-26 11:12:20.000000000 +0100
+--- scipy-0.7.1/scipy/weave/catalog.py	2009-09-26 11:14:32.000000000 +0100
+***************
+*** 42,48 ****
+      import shelve
+      dumb = 0
+  except ImportError:
+!     import scipy.io.dumb_shelve as shelve
+      dumb = 1
+  
+  #For testing...
+--- 42,48 ----
+      import shelve
+      dumb = 0
+  except ImportError:
+!     import dumb_shelve as shelve
+      dumb = 1
+  
+  #For testing...
+***************
+*** 86,92 ****
+          Something that was a little more human readable would be
+          nice, but the computer doesn't seem to care.
+      """
+!     import scipy.weave.md5_load as md5
+      base = 'sc_'
+      return base + md5.new(expr).hexdigest()
+  
+--- 86,92 ----
+          Something that was a little more human readable would be
+          nice, but the computer doesn't seem to care.
+      """
+!     import md5_load as md5
+      base = 'sc_'
+      return base + md5.new(expr).hexdigest()
+
+  
+*** scipy-0.7.1/scipy/weave/platform_info.py	2009-09-26 11:13:57.000000000 +0100
+--- scipy-0.7.1/scipy/weave/platform_info.py	2009-09-26 11:14:55.000000000 +0100
+***************
+*** 88,94 ****
+      return exe_path
+  
+  def check_sum(file):
+!     import scipy.weave.md5_load as md5
+      try:
+          f = open(file,'r')
+          bytes = f.read(-1)
+--- 88,94 ----
+      return exe_path
+  
+  def check_sum(file):
+!     import md5_load as md5
+      try:
+          f = open(file,'r')
+          bytes = f.read(-1)

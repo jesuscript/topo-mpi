@@ -1,0 +1,119 @@
+# ALERT: Please document this file!
+"""
+
+$Id$
+"""
+__version__='$Revision$'
+
+
+import numpy
+import __main__
+from math import pi, sqrt
+
+
+import matplotlib
+matplotlib.use('TkAgg')
+
+
+import topo.pattern.basic
+import topo.pattern.random
+
+from topo.pattern.basic import Gaussian
+from topo.sheet.lissom import LISSOM
+from topo.sheet import GeneratorSheet
+from topo.projection.basic import CFProjection, SharedWeightCFProjection
+from topo.responsefn.optimized import CFPRF_DotProduct_opt
+from topo.base.cf import CFSheet
+from topo.base.boundingregion import BoundingBox
+from topo.learningfn.optimized import CFPLF_Hebbian_opt
+from topo.transferfn.optimized import CFPOF_DivisiveNormalizeL1_opt
+from topo.transferfn.basic import PiecewiseLinear, DivisiveNormalizeL1, IdentityTF, Sigmoid
+from topo import numbergen
+
+
+#num_inputs=2
+#input_type=Gaussian
+#inputs=[input_type(x=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=12+i),
+#                   y=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=34+i),
+#                   orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56+i),
+#                   size=0.088388, aspect_ratio=4.66667, scale=1.0,
+#                   bounds=BoundingBox(radius=0.8)) # JABALERT: What does this bounds do?
+#        for i in xrange(num_inputs)]
+#
+#combined_inputs = topo.pattern.basic.SeparatedComposite(min_separation=2.2*0.27083,generators=inputs)
+                                 
+
+combined_inputs = topo.pattern.basic.Gaussian(
+          scale=1.0, size=0.08333, aspect_ratio=4.6666,
+          x=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=12),
+          y=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=34),
+          orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56))
+
+# Default for tutorial
+topo.pattern.basic.Line.scale=0.9
+topo.pattern.basic.Gaussian.size=0.08333
+topo.pattern.basic.Gaussian.aspect_ratio=4.0
+
+# Specify weight initialization, response function, and learning function
+CFProjection.cf_shape = topo.pattern.basic.Disk(smoothing=0.0)
+CFProjection.weights_generator = topo.pattern.basic.Constant()
+CFProjection.response_fn=CFPRF_DotProduct_opt()
+CFProjection.learning_fn=CFPLF_Hebbian_opt()
+CFProjection.weights_output_fn=CFPOF_DivisiveNormalizeL1_opt()
+SharedWeightCFProjection.response_fn=CFPRF_DotProduct_opt()
+
+
+###########################################
+# build simulation
+
+topo.sim['Retina']=GeneratorSheet(nominal_density=48.0,
+                                  input_generator=combined_inputs,
+                                  period=1.0, phase=0.05,
+                                  nominal_bounds=BoundingBox(radius=1.0+0.25+0.375))
+
+topo.sim['LGNOnSep']=LISSOM(nominal_density=48.0,tsettle=locals().get('tsettle',2),
+                          nominal_bounds=BoundingBox(radius=1.0+0.25),
+                          output_fn= PiecewiseLinear(lower_bound=0.0,upper_bound=1.0),
+                          #output_fn=Sigmoid(r=9,k=-0.9),
+                          measure_maps=True)
+
+#topo.sim['LGNOffSep']=LISSOM(nominal_density=48.0,tsettle=locals().get('tsettle',1),
+#                          nominal_bounds=BoundingBox(radius=0.5+0.25),
+#                          output_fn= PiecewiseLinear(lower_bound=0.0,upper_bound=2.0),
+#                          measure_maps=True)
+
+
+
+# DoG weights for the LGN
+centerg   = Gaussian(size=0.07385,aspect_ratio=1.0,output_fn=DivisiveNormalizeL1())
+surroundg = Gaussian(size=locals().get('LGNSurroundSize',0.29540),aspect_ratio=1.0,output_fn=DivisiveNormalizeL1())
+lgn_surroundg = Gaussian(size=locals().get('LGNLatSurroundSize',0.5),aspect_ratio=1.0,output_fn=DivisiveNormalizeL1())
+
+on_weights = topo.pattern.basic.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = topo.pattern.basic.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+
+
+topo.sim.connect('Retina','LGNOnSep',delay=0.1,
+                connection_type=SharedWeightCFProjection,strength=2.33,
+                 nominal_bounds_template=BoundingBox(radius=0.375),name='AfferentOn',
+                 weights_generator=on_weights)
+
+#topo.sim.connect('Retina','LGNOffSep',delay=0.1,
+#                 connection_type=SharedWeightCFProjection,strength=2.33,
+#                 nominal_bounds_template=BoundingBox(radius=0.375),name='AfferentOff',
+#                 weights_generator=off_weights)
+
+
+topo.sim.connect('LGNOnSep','LGNOnSep',delay=0.05,dest_port=('Activity','Divisive'),
+                 connection_type=SharedWeightCFProjection,strength=locals().get('LGNLatStr',18),
+                 nominal_bounds_template=BoundingBox(radius=0.5),name='LGNLateralOn',
+                 weights_generator=lgn_surroundg)
+
+#topo.sim.connect('LGNOffSep','LGNOnSep',delay=0.05,
+#                 connection_type=SharedWeightCFProjection,strength=locals().get('LGNLatStr',0),
+#                 nominal_bounds_template=BoundingBox(radius=0.5),name='LGNLateralOff',
+#                 weights_generator=lgn_surroundg)

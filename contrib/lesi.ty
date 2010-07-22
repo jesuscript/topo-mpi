@@ -1,0 +1,218 @@
+"""
+LESI model - long range excitatory, short range inhibitory
+Two layer model with one inhibitory and one excitatory sheet.
+Recurrent short range connections between sheets, long range excitation and short range inhibition
+Works well for Gaussian input. Work in progress.
+To do:
+Replace homeostatic mechansims with simpler gca-lissom
+Improve maps 
+
+$Id$
+"""
+__version__='$Revision: 8387 $'
+
+import numpy
+import copy
+
+from math import pi, sqrt
+
+
+import topo.pattern.basic
+import topo.pattern.random
+import topo.pattern.image
+
+from topo.sheet.lissom import LISSOM, JointScaling
+from topo.sheet import GeneratorSheet
+from topo.projection.basic import CFProjection, SharedWeightCFProjection
+from topo.responsefn.optimized import CFPRF_DotProduct_opt
+from topo.base.cf import CFSheet
+from topo.base.boundingregion import BoundingBox
+from topo.learningfn.projfn import CFPLF_PluginScaled
+from topo.learningfn.optimized import CFPLF_Hebbian_opt, CFPLF_Scaled_opt
+from topo.transferfn.optimized import CFPOF_DivisiveNormalizeL1_opt
+from topo.transferfn.basic import PiecewiseLinear, DivisiveNormalizeL1, HomeostaticMaxEnt, ActivityAveragingTF, AttributeTrackingTF
+from topo.transferfn.basic import GeneralizedLogistic, Sigmoid, HalfRectify
+from topo.pattern.basic import Gaussian, Composite, SeparatedComposite
+from topo import numbergen
+
+import contrib.jsldefs
+from contrib.jsldefs import lesi_analysis_function
+
+
+input_type=Gaussian
+num_inputs=locals().get('num_inputs',2) #in the case where dataset=Gaussian, must also set the number of Gaussians per iteration, default is 2
+inputs=[input_type(x=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=12+i),
+                   y=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=35+i),
+                   orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=21+i),
+                   size=0.088388, aspect_ratio=4.66667, scale= locals().get('scale', 1.0), bounds=BoundingBox(radius=0.8))
+        #Set the contrast of the gaussian patterns by setting the scale parameter.
+        for i in xrange(num_inputs)]
+
+combined_inputs = topo.pattern.basic.SeparatedComposite(min_separation=0.595826,generators=inputs, bounds=BoundingBox(radius=1.125))#min sep etc.
+    
+
+###############################################################################
+
+default_density = locals().get('default_density',48)
+default_inh_density= default_density
+default_retinal_density = locals().get('default_retinal_density',default_density/2)   
+  
+#Smoothing value for exponential averaging
+V1_smoothing=locals().get('V1_smoothing',0.999) # Allows different smoothing for averaging  V1 activity and averaging afferent activity.
+
+
+#Output functions: Sheets
+#LGN
+LGN_on_output_fns=[HalfRectify()]
+LGN_off_output_fns=[HalfRectify()]
+
+#Set targets based on frequency of occurance of V1 activation
+frequency=locals().get('frequency',2)
+
+#Target average afferent activity and target average V1 activity set based on
+#frequency and balance between afferent and lateral activity
+mu=locals().get('mu',0.0045*frequency)
+mu_inh=locals().get('mu_inh',mu*2)
+balance = locals().get('balance',4.0)
+afferent_target = locals().get('afferent_target',mu*balance)
+
+#Output Functions: Projections
+#Debugging
+step=locals().get('step',15)
+
+# Specify weight initialization, response function, and learning function
+CFProjection.cf_shape = topo.pattern.basic.Disk(smoothing=0.0)
+CFProjection.weights_generator = topo.pattern.basic.Constant()
+CFProjection.response_fn=CFPRF_DotProduct_opt()
+CFProjection.learning_fn=CFPLF_Hebbian_opt()
+CFProjection.weights_output_fns=[CFPOF_DivisiveNormalizeL1_opt()]
+SharedWeightCFProjection.response_fn=CFPRF_DotProduct_opt()
+
+
+# DoG weights for the LGN
+
+centerg   = Gaussian(size=0.07385,aspect_ratio=1.0,output_fns=[DivisiveNormalizeL1()])
+surroundg = Gaussian(size=0.29540,aspect_ratio=1.0,output_fns=[DivisiveNormalizeL1()])
+    
+on_weights = topo.pattern.basic.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = topo.pattern.basic.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+#Function for generating Gaussian random initial weights
+def gauss_rand(size):
+    return topo.pattern.basic.Composite(operator=numpy.multiply, 
+                                         generators=[Gaussian(aspect_ratio=1.0, size=size),
+                                                     topo.pattern.random.UniformRandom()])
+
+#Whether or not to use divisive weights normalization
+norm=locals().get('norm',True)
+
+if norm==False:
+    pi=topo.base.cf.CFPOF_Plugin(single_cf_fn=topo.transferfn.basic.IdentityTF())
+else:
+    pi = None
+
+###########################################
+###########################################
+# build simulation
+HE=HomeostaticMaxEnt(smoothing=0.999, eta=locals().get('eta',0.0002*15), mu=mu, step=step, a_init=14.5, b_init=-4.0)
+V1_OF_exc=[HE]                             
+
+S=Sigmoid(r=12, k=-5.5)
+V1_OF_inh=[S]                            
+
+
+# sheet initialization
+topo.sim['Retina']=GeneratorSheet(nominal_density=default_retinal_density,
+                                  input_generator=combined_inputs,
+                                  period=1.0, phase=0.05,
+                                  nominal_bounds=BoundingBox(radius=0.5+0.25+0.375))
+
+topo.sim['LGNOn']=CFSheet(nominal_density=default_retinal_density,
+                          nominal_bounds=BoundingBox(radius=0.5+0.25),
+                          output_fns=LGN_on_output_fns,
+                          measure_maps=False)
+
+topo.sim['LGNOff']=CFSheet(nominal_density=default_retinal_density,
+                           nominal_bounds=BoundingBox(radius=0.5+0.25),
+                           output_fns=LGN_off_output_fns,
+                           measure_maps=False)
+
+topo.sim['V1Exc'] = JointScaling(nominal_density=default_density,
+                                 nominal_bounds=BoundingBox(radius=0.5),tsettle=step,
+                                 plastic=True,output_fns=V1_OF_exc,
+                                 target=afferent_target, smoothing=V1_smoothing,
+                                 target_lr=locals().get('target_lr',0.045))
+
+topo.sim['V1Inh'] =  LISSOM(nominal_density=default_inh_density,
+                            nominal_bounds=BoundingBox(radius=0.5),tsettle=step-1,
+                            output_fns=V1_OF_inh) 
+
+
+# Retina -> LGN
+
+## LGN ON channel
+
+topo.sim.connect('Retina','LGNOn',delay=0.05,
+                 connection_type=SharedWeightCFProjection,strength=2.33,
+                 nominal_bounds_template=BoundingBox(radius=0.375),name='Afferent',
+                 weights_generator=on_weights)
+
+topo.sim.connect('Retina','LGNOff',delay=0.05,
+                 connection_type=SharedWeightCFProjection,strength=2.33,
+                 nominal_bounds_template=BoundingBox(radius=0.375),name='Afferent',
+                 weights_generator=off_weights)
+
+## LGN -> V1 Exc
+topo.sim.connect('LGNOn','V1Exc',delay=0.05,dest_port=('Activity','JointNormalize', 'Afferent'),
+                 connection_type=CFProjection,strength=1.0,name='LGNOnAfferent',
+                 learning_fn=CFPLF_Scaled_opt(), 
+                 weights_generator=gauss_rand(size=2*0.27083),
+                 nominal_bounds_template=BoundingBox(radius=0.27083),learning_rate=locals().get('aff_lr',0.137))
+
+
+topo.sim.connect('LGNOff','V1Exc',delay=0.05,dest_port=('Activity','JointNormalize', 'Afferent'),
+                 connection_type=CFProjection,strength=1.0,name='LGNOffAfferent',
+                 learning_fn=CFPLF_Scaled_opt(),
+                 weights_generator=gauss_rand(size=2*0.27083),
+                 nominal_bounds_template=BoundingBox(radius=0.27083),learning_rate=locals().get('aff_lr',0.137))
+
+
+# Intra V1  connections
+
+topo.sim.connect('V1Exc','V1Exc', delay=0.05,
+                 connection_type=CFProjection,strength=locals().get('latexloc',0.7), name='LateralExcitatory_local',
+                 weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template=BoundingBox(radius=0.03),
+                 learning_rate=0)
+
+topo.sim.connect('V1Exc','V1Exc', delay=0.05,
+                 connection_type=CFProjection,strength =locals().get('latex',0.1), name='LateralExcitatory',
+                 weights_generator=gauss_rand(size=2*0.22917),
+                 nominal_bounds_template=BoundingBox(radius=0.229),learning_rate=1.8087)
+              
+topo.sim.connect('V1Exc','V1Inh', delay=0.05,
+                 connection_type=CFProjection,strength =locals().get('exinloc',0.6), name='V1Exc_to_V1Inh_local',
+                 weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template = BoundingBox(radius=0.03),learning_rate=0)
+
+topo.sim.connect('V1Exc','V1Inh', delay=0.05,
+                 connection_type=CFProjection,strength =locals().get('exin',1.5), name='V1Exc_to_V1Inh',
+                 weights_generator=gauss_rand(size=2*0.22917),
+                 nominal_bounds_template=BoundingBox(radius=0.229),learning_rate=1.8087)
+
+
+topo.sim.connect('V1Inh','V1Exc', delay=0.05,
+                 connection_type=CFProjection,strength=locals().get('inex',-0.35), name='V1Inh_to_V1Exc',
+                 weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template = BoundingBox(radius=0.03),learning_rate=0)
+
+topo.sim.connect('V1Inh','V1Inh', delay=0.05,
+                 connection_type=CFProjection,strength=locals().get('inin',-0.35), name='V1Inh_to_V1Inh',
+                 weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template = BoundingBox(radius=0.03),learning_rate=0)
+
+
+    

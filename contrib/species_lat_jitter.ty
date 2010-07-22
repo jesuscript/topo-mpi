@@ -1,0 +1,325 @@
+""" 
+Models paramterized using values taken from the literature on the mouse and cat visual pathway.
+Lateral connections can be adjusted to increase their initial sparsity, which can lead to the
+development of jitter in afferent connections.
+Full debugging and analysis is included.
+As described in Chapter 5 of Judith Laws thesis.
+$Id$
+"""
+__version__='$Revision: 8197 $'
+
+import fixedpoint
+import numpy
+
+from math import pi, sqrt
+from fixedpoint import FixedPoint
+
+import topo.pattern.basic
+import topo.pattern.random
+
+
+from topo.pattern.basic import Gaussian, Rectangle
+from topo.pattern.random import GaussianCloud, BinaryUniformRandom
+from topo.sheet.lissom import JointScaling, LISSOM
+from topo.sheet import GeneratorSheet
+from topo.projection.basic import CFProjection, SharedWeightCFProjection
+from topo.responsefn.optimized import CFPRF_DotProduct_opt
+from topo.base.cf import CFSheet, CFPOF_Plugin
+from topo.base.boundingregion import BoundingBox
+from topo.learningfn.optimized import CFPLF_Hebbian_opt, CFPLF_Scaled_opt
+from topo.transferfn.optimized import CFPOF_DivisiveNormalizeL1_opt
+from topo.transferfn.misc import AttributeTrackingTF
+from topo.transferfn.basic import PiecewiseLinear, DivisiveNormalizeL1, IdentityTF, ActivityAveragingTF, BinaryThreshold, Threshold
+from topo.transferfn.misc import HalfRectify
+from topo.transferfn.basic import Sigmoid, HalfRectifyAndPower, HomeostaticMaxEnt
+from topo import numbergen
+from topo.pattern.image import Image
+from topo.coordmapper.basic import Jitter, NormalJitter
+#import contrib.jsldefs
+#from contrib.jsldefs import species_analysis_function, param_analysis_function, plot_out_connections, JointScaling_affonly, two_photon_plot
+import topo.plotting.plotgroup
+
+species=locals().get('species',"mouse")
+patches=locals().get('patches',4.0) #in model coordinates 1.0 x 1.0 is one 2-photon patch - assume these are approx  330x330um
+#########Parameters specific to species#############################
+
+#Representing 1 slice 2-photon imaging of a patch of V1###
+if species=="cat":
+    topo.sim.name="cat"
+   
+    on_probability=locals().get('on_probability', 0.05) #Controls sparsity of lateral connections
+
+
+    #LGN RF sizes
+    #Using magnification factor in um/deg
+    mag_factor=locals().get('mag_factor',667)
+    #LGN centre size in deg
+    centre_size=locals().get('centre_size',0.5)
+    #Total Retina size in degrees
+    ret_deg_size=patches*340/mag_factor
+    #LGN centre size in sheet coordinates
+    centre_size_sc=centre_size*mag_factor/340
+    
+
+    #retina (average of 10deg from ac) is approx 1.48x1.48 deg 
+    #assuming that we are in central 20deg - average X cell diameter = 0.515 deg
+
+    centerg   = Gaussian(size=centre_size_sc,aspect_ratio=1.0,output_fns=[DivisiveNormalizeL1()])
+    surroundg = Gaussian(size=centre_size_sc*4,aspect_ratio=1.0,output_fns=[DivisiveNormalizeL1()])
+
+    #Receptive field sizes (radii)
+    Afferent_size=centre_size_sc*2 #to account for full surround
+    LGNAfferent_size=locals().get('LGNAfferent_size',3.0) #Avg rf diameter 1.5deg make 3dg initially, 3deg=6.0sc -> radius 3.0
+    Lat_inh_size=locals().get('Lat_inh_size',1.5) #should be 2mm but too big to include - made full extent of V1 area
+    Lat_exc_size=locals().get('Lat_exc_size',0.1) #approx 150um diameter
+
+    #Sheet sizes - total of 2 photon patches
+    V1_size = patches*1.0/2
+    LGN_size = V1_size + LGNAfferent_size 
+    Retina_size= LGN_size + Afferent_size 
+    
+    
+    #0.3 mm corresponds to about 10 units from 2 photon in V1
+    default_density = locals().get('default_density',10.0)
+    #LGN density - from ratio of lgn to V1 size
+    default_lgn_density = locals().get('default_lgn_density',4.0)
+    #Retinal density to ensure smoothness
+    default_retinal_density = locals().get('default_retinal_density',4.0*Retina_size/LGN_size)
+    max_jitter=1.0/default_density*0.75
+    input_bounds=locals().get('input_bounds',Retina_size)
+
+    #Type of input
+    dataset=locals().get('dataset',"Gaussian")
+
+    #nat_size=locals().get('nat_size', Retina_size/10) 
+
+    #frequency=locals().get('frequency',2)
+    mu=locals().get('mu',0.01)
+    #balance=locals().get('balance',4)
+    afferent_target = locals().get('afferent_target', 0.06)
+    target_lr=locals().get('target_lr', 0.06)
+   
+    aff_strength =locals().get('aff_strength',4.0)
+if species=="mouse":
+    topo.sim.name="mouse"
+
+    on_probability=locals().get('on_probability', 0.05) #Controls sparsity of lateral connections
+
+    #LGN RF sizes
+    #Using magnification factor in um/deg
+    mag_factor=locals().get('mag_factor',15.0)
+    #LGN centre size in deg
+    centre_size=locals().get('centre_size',6.0)
+    surround_size=locals().get('surround_size',17.0)
+    #Total Retina size in degrees
+    ret_deg_size=patches*340/mag_factor
+    #LGN centre size in sheet coordinates
+    centre_size_sc=centre_size*mag_factor/340
+    surround_size_sc=surround_size*mag_factor/340
+    
+   
+    centerg   = Gaussian(size=centre_size_sc,aspect_ratio=1.0,output_fns=[DivisiveNormalizeL1()])
+    surroundg = Gaussian(size=surround_size_sc,aspect_ratio=1.0,output_fns=[DivisiveNormalizeL1()])
+
+    #Receptive field sizes (radii)
+    Afferent_size=surround_size_sc/2.0 #to account for full surround
+    LGNAfferent_size=locals().get('LGNAfferent_size',1.0) #Avg V1 RF = 14 deg rad
+    Lat_inh_size=locals().get('Lat_inh_size',1.5) #should be 2mm but too big to include - made full extent of V1 area
+    Lat_exc_size=locals().get('Lat_exc_size',0.1) #approx 150um diameter
+
+ 
+    #Sheet sizes - total of 2 photon patches
+    V1_size = patches*1.0/2.0
+    LGN_size = V1_size + LGNAfferent_size
+    Retina_size= LGN_size + Afferent_size 
+
+    #0.3 mm corresponds to about 10 units from 2 photon in V1
+    default_density = locals().get('default_density',10.0)
+    #LGN density - from ratio of lgn to V1 size
+    default_lgn_density = locals().get('default_lgn_density',10.0)
+    #Retinal density to ensure smoothness
+    default_retinal_density = locals().get('default_retinal_density',20.0)
+    max_jitter=1.0/default_density*0.75
+    
+    input_bounds=locals().get('input_bounds',Retina_size)
+
+    #Type of input
+    dataset=locals().get('dataset',"Gaussian")
+
+
+    #frequency=locals().get('frequency',2)
+    mu=locals().get('mu',0.03)
+    afferent_target = locals().get('afferent_target', 0.022)
+    target_lr=locals().get('target_lr', 0.017)
+    aff_strength =locals().get('aff_strength',10.0)
+###############################################################
+####Different input types which can be used for development###
+#set the input type by choosing the dataset parameter 
+
+#Set targets based on frequency of occurance of V1 activation
+num_inputs=locals().get('num_inputs', 2)
+if dataset=="Gaussian":
+    input_type=Gaussian
+    if species=="mouse":
+        gauss_size=0.27
+       
+    else:
+        gauss_size=1.04
+    #in the case where dataset=Gaussian, must also set the number of Gaussians per iteration, default is 2
+    inputs=[input_type(x=numbergen.UniformRandom(lbound=-input_bounds,ubound=input_bounds,seed=12+i),
+                       y=numbergen.UniformRandom(lbound=-input_bounds,ubound=input_bounds,seed=35+i),
+                       orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=21+i),
+                       size=gauss_size, aspect_ratio=4.0, scale=1.0, bounds=BoundingBox(radius=input_bounds))
+            #Set the contrast of the gaussian patterns by setting the scale parameter.
+            for i in xrange(num_inputs)]
+    
+    combined_inputs = topo.pattern.basic.SeparatedComposite(min_separation=0,generators=inputs)
+    
+elif dataset=="Natural":
+    
+    input_type=topo.pattern.image.Image
+    image_filenames=["/group/project/csng/images/mcgill_img/foliage/%02d.png"%(i+1) for i in xrange(98)]
+    inputs=[input_type(filename=f,
+                       size=nat_size, size_normalization='original',
+                       x=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=12),
+                       y=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=36),
+                       orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=65))
+                for f in image_filenames]
+
+    combined_inputs =topo.pattern.basic.Selector(generators=inputs)
+
+###############################################################################
+
+#Sheet coordinates of units to track for debugging
+units=locals().get('units',[(0.0, 0.0)])
+smoothing=0.999
+#Output functions: Sheets
+#LGN
+LGN_on_output_fn=[HalfRectify()]
+LGN_off_output_fn=[HalfRectify()]
+
+
+#V1
+V1_Tracker_1=AttributeTrackingTF(object='topo.sim["V1"]', attrib_names=['x_avg', 'lr_sf', 'sf', 'scaled_x_avg'], units=units, step=1)
+HR = HomeostaticMaxEnt(mu=mu, smoothing=smoothing, eta=0.016, step=9, a_init=12, b_init=-4)
+V1_Tracker_2=AttributeTrackingTF(object=HR, coordframe="topo.sim['V1']",attrib_names=['y_avg', 'a', 'b'], units=units, step=1)
+V1_OF=[V1_Tracker_1, HR, V1_Tracker_2]
+       
+#Output Functions: Projections
+#Debugging
+#LGNOnAfferent
+LGNOn_Avg=ActivityAveragingTF(smoothing=smoothing,step=1)
+LGNOn_Tracker=AttributeTrackingTF(object=LGNOn_Avg,coordframe="topo.sim['V1']", attrib_names=['x_avg'], units=units, step=1)
+LGNOn_OF =[LGNOn_Avg, LGNOn_Tracker]
+
+#LGNOffAfferent
+LGNOff_Avg=ActivityAveragingTF(smoothing=smoothing,step=1)
+LGNOff_Tracker=AttributeTrackingTF(object=LGNOff_Avg,coordframe="topo.sim['V1']", attrib_names=['x_avg'], units=units, step=1)
+LGNOff_OF = [LGNOff_Avg, LGNOff_Tracker]
+
+#LateralExcitatory
+LatEx_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+LatEx_Tracker=AttributeTrackingTF(object=LatEx_Avg,coordframe="topo.sim['V1']", attrib_names=['x_avg'], units=units, step=1)
+LatEx_OF = [LatEx_Avg, LatEx_Tracker]
+
+#LateralInhibitory
+LatIn_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+LatIn_Tracker = AttributeTrackingTF(object=LatIn_Avg,coordframe="topo.sim['V1']", attrib_names=['x_avg'], units=units, step=1)
+LatIn_OF = [LatIn_Avg, LatIn_Tracker]
+
+# Specify weight initialization, response function, and learning function
+CFProjection.cf_shape = topo.pattern.basic.Disk(smoothing=0.0)
+CFProjection.weights_generator = topo.pattern.basic.Constant()
+CFProjection.response_fn=CFPRF_DotProduct_opt()
+CFProjection.learning_fn=CFPLF_Hebbian_opt()
+CFProjection.weights_output_fns=[CFPOF_DivisiveNormalizeL1_opt()]
+SharedWeightCFProjection.response_fn=CFPRF_DotProduct_opt()
+
+
+# DoG weights for the LGN
+    
+on_weights = topo.pattern.basic.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = topo.pattern.basic.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+#Jitter
+cell_jitter_on=Jitter(gen=numbergen.UniformRandom(seed=37), scale=max_jitter)
+cell_jitter_off=Jitter(gen=numbergen.UniformRandom(seed=37), scale=max_jitter)
+cell_jitter_exc=Jitter(gen=numbergen.UniformRandom(seed=37), scale=max_jitter)
+cell_jitter_inh=Jitter(gen=numbergen.UniformRandom(seed=37), scale=max_jitter)
+
+
+###########################################
+# build simulation
+
+topo.sim['Retina']=GeneratorSheet(nominal_density=default_retinal_density,
+                                  input_generator=combined_inputs,
+                                  period=1.0, phase=0.05,
+                                  nominal_bounds=BoundingBox(radius=Retina_size))
+
+topo.sim['LGNOn']=CFSheet(nominal_density=default_lgn_density,
+                          nominal_bounds=BoundingBox(radius=LGN_size),
+                          output_fns=LGN_on_output_fn,
+                          measure_maps=False)
+
+topo.sim['LGNOff']=CFSheet(nominal_density=default_lgn_density,
+                           nominal_bounds=BoundingBox(radius=LGN_size),
+                           output_fns=LGN_off_output_fn,
+                           measure_maps=False)
+
+topo.sim['V1'] = JointScaling(nominal_density=default_density,
+                              nominal_bounds=BoundingBox(radius=V1_size),tsettle=9,
+                              plastic=True,output_fns=V1_OF,
+                              target=afferent_target,target_lr=target_lr,
+                              smoothing=smoothing)
+
+topo.sim.connect('Retina','LGNOn',delay=FixedPoint("0.05"),
+                 connection_type=SharedWeightCFProjection, strength=aff_strength,
+                 nominal_bounds_template=BoundingBox(radius=Afferent_size),name='Afferent',
+                 weights_generator=on_weights)
+
+topo.sim.connect('Retina','LGNOff',delay = FixedPoint("0.05"),
+                 connection_type=SharedWeightCFProjection, strength=aff_strength,
+                 nominal_bounds_template=BoundingBox(radius=Afferent_size),name='Afferent',
+                 weights_generator=off_weights)
+
+topo.sim.connect('LGNOn','V1',delay=FixedPoint("0.05"), dest_port=('Activity','JointNormalize', 'Afferent'),
+                 connection_type=CFProjection,coord_mapper=cell_jitter_on,
+                 strength=1.0,name='LGNOnAfferent',
+                 learning_fn=CFPLF_Scaled_opt(),
+                 output_fns=LGNOn_OF,
+                 weights_generator=topo.pattern.random.GaussianCloud(gaussian_size=2*LGNAfferent_size),
+                 nominal_bounds_template=BoundingBox(radius=LGNAfferent_size),learning_rate=locals().get('aff_lr',0.137))
+
+
+topo.sim.connect('LGNOff','V1',delay=FixedPoint("0.05"), dest_port=('Activity','JointNormalize', 'Afferent'),
+                 connection_type=CFProjection,coord_mapper=cell_jitter_off,
+                 strength=1.0,name='LGNOffAfferent',
+                 output_fns=LGNOff_OF,
+                 learning_fn=CFPLF_Scaled_opt(),
+                 weights_generator=topo.pattern.random.GaussianCloud(gaussian_size=2*LGNAfferent_size),
+                 nominal_bounds_template=BoundingBox(radius=LGNAfferent_size),learning_rate=locals().get('aff_lr',0.137))
+
+
+topo.sim.connect('V1','V1',delay=FixedPoint("0.05"),name='LateralExcitatory',
+                 connection_type=CFProjection,coord_mapper=cell_jitter_exc,
+                 strength=1.5,
+                 output_fns=LatEx_OF,
+                 same_cf_shape_for_all_cfs=False,
+                 cf_shape=topo.pattern.basic.Disk(mask_shape=BinaryUniformRandom(on_probability=on_probability)),
+                 #weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=Lat_exc_size*2),
+                 nominal_bounds_template=BoundingBox(radius=Lat_exc_size*10),learning_rate=locals().get('lat_exc_lr',0.5))
+
+topo.sim.connect('V1','V1',delay=FixedPoint("0.05"),name='LateralInhibitory',
+                 connection_type=CFProjection,coord_mapper=cell_jitter_inh,
+                 strength=locals().get('inh',-2.0),
+                 output_fns=LatIn_OF,
+                 same_cf_shape_for_all_cfs=False,
+                 cf_shape=topo.pattern.basic.Disk(mask_shape=BinaryUniformRandom(on_probability=on_probability)),
+                 #weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=Lat_inh_size),
+                 #weights_generator=topo.pattern.random.GaussianCloud(gaussian_size=Lat_inh_size),
+                 nominal_bounds_template=BoundingBox(radius=Lat_inh_size),learning_rate=locals().get('lat_lr',1.80873))
+
+

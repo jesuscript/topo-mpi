@@ -1,0 +1,143 @@
+"""
+Work in progress for developing spoken word/color association simulation
+from Plebe et al.
+
+Currently has only Intensity, LGN, and V1.
+
+$Id$
+"""
+__version__='$Revision$'
+
+
+from math import pi, sqrt
+import numpy
+
+from topo import learningfn,numbergen,transferfn,pattern,projection,responsefn,sheet 
+
+import topo.learningfn.optimized
+import topo.learningfn.projfn 
+import topo.transferfn.optimized 
+import topo.pattern.random
+import topo.responsefn.optimized 
+import topo.sheet.lissom
+import topo.sheet.optimized
+
+
+### Specify weight initialization, response function, and learning function
+projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
+projection.CFProjection.weights_generator=pattern.Constant()
+projection.CFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+projection.CFProjection.learning_fn=learningfn.optimized.CFPLF_Hebbian_opt()
+projection.CFProjection.weights_output_fn=transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()
+projection.SharedWeightCFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+
+### Default for tutorial
+pattern.Line.scale=0.9
+pattern.Gaussian.size=0.08333
+pattern.Gaussian.aspect_ratio=4.0
+
+
+### Input patterns
+num_inputs=2
+input_type=pattern.Gaussian
+inputs=[input_type(x=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=12+i),
+                   y=numbergen.UniformRandom(lbound=-0.75,ubound=0.75,seed=34+i),
+                   orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56+i),
+                   size=0.088388, aspect_ratio=4.66667, scale=1.0,
+                   bounds=sheet.BoundingBox(radius=0.8))
+        for i in xrange(num_inputs)]
+
+combined_inputs = pattern.SeparatedComposite(min_separation=2.2*0.27083,generators=inputs)
+
+### Area scaling -- V1 is 1.0x1.0 by default
+default_area = locals().get('default_area',3.0)
+
+### Sheets
+topo.sim['Retina']=sheet.GeneratorSheet(
+    nominal_density=locals().get('default_retina_density',32.0),
+    input_generator=combined_inputs, period=1.0, phase=0.05,
+    nominal_bounds=sheet.BoundingBox(radius=default_area/2.0+0.27083+2.618/32.0))
+
+topo.sim['LGNOn']=sheet.CFSheet(
+    nominal_density=locals().get('default_lgn_density',32.0),
+    nominal_bounds=sheet.BoundingBox(radius=default_area/2.0+0.27083),
+    output_fn=transferfn.PiecewiseLinear(lower_bound=0.0,upper_bound=1.0),
+    measure_maps=False)
+
+topo.sim['LGNOff']=sheet.CFSheet(
+    nominal_density=locals().get('default_lgn_density',32.0),
+    nominal_bounds=sheet.BoundingBox(radius=default_area/2.0+0.25),
+    output_fn=transferfn.PiecewiseLinear(lower_bound=0.0,upper_bound=1.0),
+    measure_maps=False)
+
+topo.sim['V1'] = sheet.lissom.LISSOM(
+    nominal_density=locals().get('default_density',32.0),
+    nominal_bounds=sheet.BoundingBox(radius=default_area/2.0),tsettle=9,
+    output_fn=transferfn.PiecewiseLinear(lower_bound=0.083,upper_bound=0.633),
+    joint_norm_fn=sheet.optimized.compute_joint_norm_totals_opt)
+
+
+
+### Connections
+
+# DoG weights for the LGN
+centerg   = pattern.Gaussian(size=0.6545/32.0,aspect_ratio=1.0,
+                             output_fn=transferfn.DivisiveNormalizeL1())
+surroundg = pattern.Gaussian(size=2.618/32.0,aspect_ratio=1.0,
+                             output_fn=transferfn.DivisiveNormalizeL1())
+
+on_weights = pattern.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = pattern.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+
+topo.sim.connect(
+    'Retina','LGNOn',delay=0.05,strength=2.33,name='Afferent',
+    connection_type=projection.SharedWeightCFProjection,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.375),
+    weights_generator=on_weights)
+
+topo.sim.connect(
+    'Retina','LGNOff',delay=0.05,strength=2.33,name='Afferent',
+    connection_type=projection.SharedWeightCFProjection,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.375),
+    weights_generator=off_weights)
+
+topo.sim.connect(
+    'LGNOn','V1',delay=0.05,strength=1.0,name='LGNOnAfferent',
+    dest_port=('Activity','JointNormalize','Afferent'),
+    connection_type=projection.CFProjection,learning_rate=0.9590/2,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.27083),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083))
+
+topo.sim.connect(
+    'LGNOff','V1',delay=0.05,strength=1.0,name='LGNOffAfferent',
+    dest_port=('Activity','JointNormalize','Afferent'),
+    connection_type=projection.CFProjection,learning_rate=0.9590/2,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.27083),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083))
+
+topo.sim.connect(
+    'V1','V1',delay=0.05,strength=0.9,name='LateralExcitatory',
+    connection_type=projection.CFProjection,learning_rate=2.55528,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.10417),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.10417))
+            
+topo.sim.connect(
+    'V1','V1',delay=0.05,strength=-0.9,name='LateralInhibitory',
+    connection_type=projection.CFProjection,learning_rate=1.80873,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.22917),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.22917))
+
+
+
+### Actions scheduled to occur as the simulation proceeds.
+sheet.lissom.schedule_events("topo.sim['V1']",st=1.0/num_inputs,aff_name="Afferent")
+
+
+### Default locations for model editor
+topo.sim.grid_layout([[None,    'V1',     None],
+                      ['LGNOn', None,     'LGNOff'],
+                      [None,    'Retina', None]], xstart=150)

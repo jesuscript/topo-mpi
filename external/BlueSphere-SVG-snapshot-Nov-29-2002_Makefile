@@ -1,0 +1,34 @@
+# Makefile,v 1.12 2002/08/18 17:24:46 jbednar Exp
+#
+# Requires GNU make
+
+# Files to process
+#SVGFILES = ${wildcard *.svg}
+#SVGFILES = 1leftarrow.svg 1rightarrow.svg edit_add_nobg.svg edit_remove_nobg.svg redo-2.0.svg 
+SVGFILES = back-2.0.svg forward-2.0.svg redo-small.svg viewmag-_2.1.svg viewmag+_2.2.svg arrow-down-2.0.svg arrow-up.svg edit_add.svg edit_remove.svg stop-2.1.svg trashcan_empty-2.1.svg star-button.svg
+SVGPNGS  = ${subst .svg,.png,${SVGFILES}}
+
+SIZE=20 20
+
+# Default targets 
+all: svgpngs
+
+svgpngs: ${SVGPNGS}
+
+# General rule for making .png out of .svg
+%.png : %.svg
+	ksvgtopng ${SIZE} $< $@
+
+# Cleanup
+
+clean:
+	$(RM) *~
+
+output_clean:
+	${RM} ${SVGPNGS}
+
+really_clean: clean output_clean
+
+.PHONY: all default clean output_clean really_clean
+FORCE :
+

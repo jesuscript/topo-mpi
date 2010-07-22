@@ -1,0 +1,231 @@
+#!/usr/bin/python
+
+# Creates a bash script that will launch multiple batch simulations.
+# 
+# Batch simulation running is done with topo.command.run_batch().
+# 
+# 
+# Instructions
+# ============
+# 
+# (1) Create a whitespace-delimited text file specifying the parameter
+# combinations you'd like to try. E.g.:
+# 
+# lgn_density  cortex_density  retina_density  dims         dataset     
+# 2            2               4               ["or","cr"]  "FoliageB"  
+# 2            4               2               ["or","dy"]  "Nature"    
+# 2            2               2               ["or"]       "FoliageB"
+# 
+# Each 'experiment' (i.e. combination of parameters) is on its own
+# row. (Parameters that should be common to all experiments are passed
+# at the commandline; see later.) Note that double quotes (") must be
+# used, since the command will already be inside single (') quotes.
+# There should be no blank line at the end, and there can be no
+# comments.
+# 
+# 
+# (2) Create a suitable config file; see the example
+# parameter_search.cfg.
+#
+#
+# (3) Run this script by passing the config file as the first
+# argument, the topographica .ty file you want to run as the second
+# argument, the parameter combinations file as the third, and finally
+# specify any parameters you want to be common to all experiments.
+# E.g: 
+#  ./parameter_search ps.cfg script.ty combs 'times=[1],a="def"'
+# 
+# Note that the common parameters must be specified in a single-quoted
+# string, and that as above any strings must be enclosed in at least
+# double quotes.
+# 
+#
+# (4) The result is a script that, when run, will submit all the jobs.
+
+def usage():
+    print """
+Please see the script's docstring for full instructions.
+
+Usage: parameter_search [config-file] [script] [combinations-file] (<common-params>)
+
+Examples:
+       parameter_search cfg examples/lissom.ty combs 
+       parameter_search cfg examples/lissom.ty combs 'times=[1,2],astring="test"'
+"""
+
+
+# support python 2.3
+try:
+    set
+except NameError:
+    from sets import Set as set
+
+import sys
+import string
+import os
+import ConfigParser
+import os.path
+import shutil
+
+
+# CEBALERT: duplicates fn in nobrain script
+def process_section(name,config):
+    """
+    Return a dictionary representing section [name] of the
+    ConfigParser config.
+
+    Entries in the ConfigParser that end '_template' will be created
+    as string.Templates (allowing later substitution of ${}-delimited
+    variables).
+    """
+    import string
+    d = {'string':string}
+    for option,value in config.items(name):
+        if option.endswith('_template'):
+            s = "%s=string.Template(%s)"%(option,value)
+        else:
+            s = "%s=%s"%(option,value)
+        #logger.debug(s)
+        exec s in d
+    
+    del d['string']
+    
+    if '__builtins__' in d: # inserted by exec
+        del d['__builtins__'] 
+
+    return d
+
+
+args = sys.argv[1::]    
+
+if len(args)<3 or len(args)>4:
+    usage()
+    sys.exit(-1)
+
+
+config_file = args[0]
+script = args[1]
+combinations_file = args[2]
+print "Reading combinations from '%s'."%combinations_file
+if len(args)==4:
+    common_params = args[3]
+else:
+    common_params = None
+
+
+
+config = ConfigParser.ConfigParser()
+print "Reading options from '%s'."%config_file
+config.read(config_file)
+options = process_section('Options',config)
+
+output_path = os.path.join(options['results_path'],combinations_file)
+
+if not os.path.isdir(output_path):
+    os.mkdir(output_path)
+
+saved_combinations_file = os.path.join(output_path,combinations_file)
+if os.path.isfile(saved_combinations_file):
+    old_combinations_file=saved_combinations_file+'.old'
+    print "WARNING: %s already exists; renaming to %s.old"%(saved_combinations_file,
+                                                            old_combinations_file)
+    shutil.copy(saved_combinations_file,old_combinations_file)
+shutil.copy(combinations_file,saved_combinations_file)
+
+saved_cmd_file = os.path.join(output_path,'cmd')
+if os.path.isfile(saved_cmd_file):
+    old_cmd_file=saved_cmd_file+'.old'
+    print "WARNING: %s already exists; renaming to %s"%(saved_cmd_file,
+                                                        old_cmd_file)
+    shutil.copy(saved_cmd_file,old_cmd_file)
+f = open(saved_cmd_file,'w')
+f.write(string.join(sys.argv))
+f.close()
+
+
+substitutions = {'combonumber':'$i',
+                 'comboname':os.path.basename(combinations_file)}
+
+selector = options['selector_template'].substitute(substitutions)
+
+substitutions['job'] = './%s $i'%selector
+
+import copy
+def _generate_command(parameters,i):
+    """Generate a command for running Topographica with the supplied parameters."""
+    cmd = '"%s"'%script
+
+    cmd+=',output_directory="%s"'%output_path
+
+    # CEBHACKALERT: passing i into this function, etc - it's all a hack
+    tmp_subs = copy.copy(substitutions)
+    tmp_subs['combonumber']="%02i"%i
+
+    if options['topographica_dirname_prefix_template'] is not None:
+        cmd+=',dirname_prefix="%s"'%options['topographica_dirname_prefix_template'].substitute(tmp_subs)
+
+    if common_params is not None:
+        cmd+=',%s'%common_params
+
+    for name,val in zip(names,parameters):
+        cmd += ',%s=%s'%(name,val)
+
+    cmd = "run_batch(%s)"%cmd
+    return "%s %s -c '%s'"%(options['topographica_script'],
+                            string.join(options['topographica_args']),
+                            cmd)
+
+
+## Read in combinations 
+f = open(combinations_file,'r')
+lines = f.readlines()
+f.close()
+names = lines[0].split() # headers assumed to be in row 0
+assert len(names)==len(set(names)), "Duplicate parameter names"
+num_params = len(names)
+
+combinations = []
+for line in lines[1::]:
+    if not line.startswith('\n'):
+        vals = line.split()
+        assert len(vals)==num_params,"Line '%s' does not contain %s values"%(line,num_params)
+        combinations.append(vals)
+
+
+## Generate script that will run any one of the parameter combinations.
+fout = open(selector,'w')
+fout.write('#!/bin/bash -i\n')
+
+for i,params in zip(range(len(combinations)),combinations):
+    cmd = _generate_command(params,i)
+    
+    nscript= """
+if [ "$1" = "%s" ]; then
+    %s
+fi
+    """%(i,cmd)
+    fout.write(nscript)
+
+fout.close()
+os.system('chmod +x %s'%selector)
+
+
+## Generate script that will submit all combinations
+submitter = options['submitter_template'].substitute(substitutions)
+f = open(submitter,'w')
+submitcmd = options['job_submit_template'].substitute(substitutions)
+
+nscript = """#!/bin/bash
+
+for ((i=0;i<%i;i+=1)); do
+    %s
+done
+"""%(len(combinations),submitcmd)
+
+f.write(nscript)
+f.close()
+os.system('chmod +x %s'%submitter)
+
+
+
+print "Running '%s' will submit your %i specified parameter combinations (using '%s' to start the topographica jobs). Output directories will be in '%s'."%(submitter,len(combinations),selector,output_path)

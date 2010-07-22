@@ -1,0 +1,12 @@
+diff --git a/external/Makefile b/external/Makefile
+index b36dc64..39207a5 100644
+--- a/external/Makefile
++++ b/external/Makefile
+@@ -57,6 +57,7 @@ python: ${PYTHON}.tgz tk
+ 	tar -xzf ${PYTHON}.tgz
+ # Configure for specific operating system versions
+ ifeq ("$(shell uname -s)","Darwin")
++	patch -p0 < Python_OSX_X11.diff
+ ifeq ("$(shell uname -r | cut -d . -f 1)","9") # Darwin 9.x == Mac OS X 10.5 (Leopard)
+ 	cd ${PYTHON}; ./configure --prefix=${PREFIX} MACOSX_DEPLOYMENT_TARGET=10.5
+ else

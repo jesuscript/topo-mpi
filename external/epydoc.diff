@@ -1,0 +1,32 @@
+--- docintrospecter.py	2006-08-29 15:14:39.000000000 +0100
++++ docintrospecter.py	2006-08-31 10:42:27.000000000 +0100
+@@ -403,6 +403,7 @@
+             val_doc = introspect_docs(child, context=class_doc)
+             var_doc = VariableDoc(name=child_name, value=val_doc,
+                                   container=class_doc,
++                                  docstring=child.__doc__, # Added by JAB
+                                   docs_extracted_by='introspecter')
+             class_doc.variables[child_name] = var_doc
+ 
+@@ -537,6 +538,9 @@
+     elif value is BuiltinMethodType:
+         # Don't issue a warning for this special case.
+         return None
++    if isinstance(docstring, property) and hasattr(value,'doc'):
++        # Added by JAB: Suppress warning for Topographica parameters
++        return None
+     else:
+         if hasattr(value, '__name__'): name = value.__name__
+         else: name = `value`
+
+--- docwriter/html.py	2007-02-26 02:17:41.000000000 +0000
++++ docwriter/html.py	2007-04-16 18:44:03.000000000 +0100
+@@ -328,7 +328,7 @@
+         self._variable_maxlines = kwargs.get('variable_maxlines', 8)
+         """Max lines for variable values"""
+         
+-        self._variable_linelen = kwargs.get('variable_linelength', 70)
++        self._variable_linelen = kwargs.get('variable_linelength', 82)
+         """Max line length for variable values"""
+         
+         self._variable_summary_linelen = \

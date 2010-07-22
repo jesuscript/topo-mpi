@@ -1,0 +1,11 @@
+--- setup.py~	2005-03-23 18:16:40.000000000 +0000
++++ setup.py	2007-08-15 10:31:15.825313035 +0100
+@@ -31,7 +31,7 @@
+ FREETYPE_ROOT = None
+ JPEG_ROOT = None
+ TIFF_ROOT = None
+-ZLIB_ROOT = None
++ZLIB_ROOT = "/usr/lib64","/usr/include"
+ TCL_ROOT = None
+ 
+ # FIXME: add mechanism to explicitly *disable* the use of a library

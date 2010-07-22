@@ -1,0 +1,81 @@
+Index: Makefile
+===================================================================
+--- Makefile	(revision 9250)
++++ Makefile	(working copy)
+@@ -1,10 +1,11 @@
+-PREFIX = ${dir ${CURDIR}}
++PREFIX = $(shell echo ${dir ${CURDIR}} | sed 's/\///'  | sed 's/\//:\//' | sed 's/\(.*\)./\1/' | sed 's/\//\\\\/g')
++PREFIX_FWD = $(shell echo ${dir ${CURDIR}} | sed 's/\///'  | sed 's/\//:\//' | sed 's/\(.*\)./\1/')
+ CC = gcc
+ 
+ # Options to pass to all setup.py install commands.
+ # (Allows us to control installation location even when not using our
+ # own Python, e.g. on Windows.)
+-PYSETUP_OPT = --prefix=${PREFIX}
++PYSETUP_OPT = --prefix=${PREFIX} --install-scripts=${PREFIX}\bin
+ 
+ default: platform-skip python jpeg pil numpy matplotlib weave fixedpoint pychecker common pylint epydoc docutils gnosis ipython gmpy tilewrapper scrodget tooltip
+ 
+@@ -34,7 +35,6 @@
+ uninstall: python-uninstall jpeg-uninstall pil-uninstall numpy-uninstall tk-uninstall tcl-uninstall matplotlib-uninstall fixedpoint-uninstall weave-uninstall pychecker-uninstall common-uninstall pylint-uninstall epydoc-uninstall docutils-uninstall gnosis-uninstall scipy-uninstall mlabwrap-uninstall ipython-uninstall libsndfile-uninstall pyaudiolab-uninstall tilewrapper-uninstall psyco-uninstall pyrex-uninstall hdf5-uninstall pytables-uninstall gnuplotpy-uninstall player-uninstall progressbar-uninstall stage-uninstall gmp-uninstall mxnumber-uninstall gmpy-uninstall scrodget-uninstall tooltip-uninstall snit-uninstall svn2cl-uninstall
+ 
+ 
+-
+ ##############################################################
+ # libblt: already available on nearly all systems, but some systems
+ # have a version incompatible with tkinter (and Tcl/Tk?), so we build
+@@ -205,7 +205,7 @@
+ #       # Tell OS X machines where to find freetype
+ 	patch -p0 < Imaging_OSX.diff
+ endif
+-	cd ${PIL}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${PREFIX}/bin/python setup.py build_ext -i
++	cd ${PIL}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${PREFIX}/bin/python setup.py build_ext --compiler=mingw32 -i
+ 	cd ${PIL}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${PREFIX}/bin/python selftest.py
+ 	cd ${PIL}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${PREFIX}/bin/python setup.py install ${PYSETUP_OPT}
+ 	touch pil
+@@ -253,7 +253,9 @@
+ 
+ matplotlib: ${MATPLOTLIB}.tar.gz python
+ 	tar -xzf ${MATPLOTLIB}.tar.gz
+-	cd ${MATPLOTLIB}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${MATPLOTLIB_DISPLAY} ${PREFIX}/bin/python setup.py build
++	cp win32_static.tar.gz ${MATPLOTLIB}
++	cd ${MATPLOTLIB}; tar -xzf win32_static.tar.gz
++	cd ${MATPLOTLIB}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${MATPLOTLIB_DISPLAY} ${PREFIX}/bin/python setup.py build --compiler=mingw32 bdist_wininst
+ 	cd ${MATPLOTLIB}; env PREFIX=${PREFIX} LD_LIBRARY_PATH=${PREFIX}/lib ${MATPLOTLIB_DISPLAY} ${PREFIX}/bin/python setup.py install ${PYSETUP_OPT}
+ 	touch matplotlib
+ 
+@@ -526,7 +528,7 @@
+ TILEWRAPPER = Tile
+ 
+ tilewrapper: python
+-	cp Tile.py ${PREFIX}/lib/python2.5/site-packages/
++	cp Tile.py ${PREFIX}/Lib/site-packages
+ 	touch tilewrapper
+ 
+ tilewrapper-uninstall:
+@@ -777,14 +779,14 @@
+ GMP_UNINSTALL += lib/libgmp.* 
+ GMP_UNINSTALL += include/gmp.h
+ 
+-
+ gmp: ${GMP}.tar.gz
+ 	tar -xzf ${GMP}.tar.gz
+-	cd ${GMP}; ./configure --prefix=${PREFIX} 
++	cd ${GMP}; ./configure --prefix=${PREFIX_FWD} 
+ 	make -C ${GMP}
+ 	make -C ${GMP} check
+ 	make -C ${GMP} install
+ 	touch gmp
++# need to reset PREFIX!
+ 
+ gmp-clean: 
+ 	rm -rf ${GMP} 
+@@ -825,7 +827,7 @@
+ 
+ gmpy: ${GMPY}.tar.gz python gmp
+ 	tar -xzf ${GMPY}.tar.gz
+-	cd ${GMPY}; ${PREFIX}/bin/python setup.py build_ext --include-dirs='${PREFIX}/include' --library-dirs='${PREFIX}/lib'; ${PREFIX}/bin/python setup.py install ${PYSETUP_OPT}
++	cd ${GMPY}; ${PREFIX}/bin/python setup.py build_ext --compiler=mingw32 --include-dirs='${PREFIX}/include' --library-dirs='${PREFIX}/lib'; ${PREFIX}/bin/python setup.py install ${PYSETUP_OPT}
+ 	touch gmpy
+ 
+ gmpy-clean:

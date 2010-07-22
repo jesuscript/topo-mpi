@@ -1,0 +1,425 @@
+#!/usr/bin/python
+
+# ** under construction! **
+
+# needs a better name
+
+# parameter_analysis path/to/experiments/ path/to/config-file
+#
+# e.g.
+# contrib/parameter_analysis Output/ contrib/parameter_analysis.cfg 
+
+
+LOG_LEVEL = 'DEBUG'
+
+import pickle
+import sys
+import os
+import glob
+import re
+import string
+import fnmatch
+import socket
+import shutil
+import tempfile
+import time
+import ConfigParser
+
+import Image
+
+
+
+### might be useful generally
+
+def create_logger(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                  level='DEBUG'):
+    import logging
+    logging_level = getattr(logging,level)
+    logger = logging.getLogger()
+    logger.setLevel(logging_level)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging_level)
+    console_handler.setFormatter(logging.Formatter(format))
+    logger.addHandler(console_handler)
+    return logger
+
+logger = create_logger(format="%(levelname)s - %(message)s",
+                       level=LOG_LEVEL)
+
+
+# CEBALERT: duplicates function in parameter_search
+def process_section(name):
+    import string
+    d = {'string':string}
+    for option,value in config.items(name):
+        if option.endswith('_template'):
+            s = "%s=string.Template(%s)"%(option,value)
+        else:
+            s = "%s=%s"%(option,value)
+        logger.debug(s)
+        exec s in d
+    
+    del d['string']
+    
+    if '__builtins__' in d:
+        del d['__builtins__']
+    return d
+
+
+### CONFIG FILE
+config_file = sys.argv[2]
+config = ConfigParser.ConfigParser()
+logger.info("Reading config from %s"%config_file)
+config.read(config_file)
+
+conditions = process_section('Conditions')
+options = process_section('Options')
+outputs = process_section('Outputs')
+condition_match_fns = process_section('Condition-matching functions')
+
+
+data_dir = sys.argv[1]
+logger.info("Experiments in %s"%data_dir)
+
+# where the images will go temporarily for generating the latex
+temp_dir = tempfile.mkdtemp()
+
+data_location = "%s:%s"%(socket.gethostname(),os.path.abspath(data_dir))
+output_file = "out_%s_%s"%(options['output_file_identifier'],
+                           time.strftime("%Y%m%d%H%M"))
+logger.debug("Outputfile: %s"%output_file)
+
+
+# string template substitutions
+subs = {'latex_file':output_file+'.latex'}
+
+
+# for matching parameter specifications
+
+def sets_equal(specified,actual):
+    return set(specified)==set(actual)
+    
+def subset(specified,actual):
+    return set(specified).issubset(set(actual))
+
+def equal(specified,actual):
+    return specified==actual
+
+
+match_fns = {
+    'sets_equal':sets_equal,
+    'subset':subset,
+    'equal':equal
+    }
+
+
+
+# CEBALERT: needs improving for nice output!
+def F(s):
+    # format dicts, lists, etc suitably for latex
+    s = s.replace('_','\_')
+    s = s.replace('{','')
+    s = s.replace('}','')
+    return s
+
+
+
+
+try:
+
+    ##################################################################
+    # walk through subdirs to find all experiments
+
+    experiments = []
+
+    w = os.walk(data_dir)
+    dirs = {}
+    outfiles = []
+    shortdirs = []
+
+    intentional_skips=0 # count skips because of e.g. not matching specified params
+    skips = 0
+    for n in w:
+        fnames = fnmatch.filter(n[2],"*.out*")
+        if len(fnames)==1:
+            shortdir = os.path.split(n[0])[1]
+
+            pth = os.path.abspath(n[0])
+            nfiles = len(os.listdir(pth))
+            if nfiles<options['min_files_is_result']:
+                skips+=1
+                logger.debug("Skipping '%s' (only contains %s files)"%(pth,nfiles))
+                
+            elif shortdir not in shortdirs:
+                dirs[n[0]] = fnames[0]
+                shortdirs.append(shortdir)
+            else:
+                skips+=1
+                x = None
+                for d in dirs.keys():
+                    if shortdir in d:
+                        x = d
+                        break
+                assert x is not None
+
+                new = os.path.abspath(n[0])
+                old = os.path.abspath(x)
+                lnew= len(os.listdir(new))
+                lold= len(os.listdir(old))
+
+                if lnew>lold:
+                    shortdirs.remove(old)
+                    shortdirs.append(shortdir)
+                    skip = old
+                    keep = new
+                    countskip = lold
+                    countkeep = lnew
+                else:
+                    skip = new
+                    keep = old
+                    countskip = lnew
+                    countkeep = lold
+
+                logger.debug("Skipping '%s' (%s files): duplicates '%s' (%s files)"%(skip,countskip,keep,countkeep))
+
+
+
+    for directory in sorted(dirs.keys()):
+
+        # CEBALERT: do it properly! could be more than one .pickle file
+        globalparamsfile = glob.glob(directory+"/*.pickle")
+
+        if len(globalparamsfile)==1:
+            globalparamsfile = glob.glob(directory+"/*.pickle")[0]
+            params = pickle.load(open(globalparamsfile))['global_params_all']
+        else:
+            logger.warn('Skipping "%s" - could not retrieve params'%directory)
+            skips+=1
+            continue
+
+        process = True
+        for param,val in conditions.items():
+            match_fn = match_fns.get(condition_match_fns.get(param))
+            if match_fn is None:
+                match_fn = match_fns['equal']
+
+            if not param in params:
+                # run_batch would need to write global params
+                # somewhere for these results to be tested
+                logger.warn('Skipping "%s" - parameter "%s" does not exist in this experiment.'%(directory,param))
+                process=False
+                skips+=1
+                break
+            elif not match_fn(val,params[param]):
+                intentional_skips+=1
+                logger.debug('Skipping "%s": %s=%s does not match %s=%s'%(directory,param,params[param],param,val))
+                process=False
+                break
+                
+        if process:
+
+            experiments.append(dict(
+                    title = os.path.split(directory)[-1].split(',')[0],
+                    subdir = os.path.split(directory)[0].lstrip(data_dir),
+                    name = directory,
+                    params = params))
+
+
+    if skips>0:
+        logger.warn("Directories skipped: %i"%skips)
+
+    logger.info("Ineligible experiments: %i"%intentional_skips)
+    logger.info("Eligible experiments: %i"%len(experiments))
+    
+
+    ############# find params that differ
+    if options['display_only_varying_params']:
+        SAME = experiments[0]['params'].keys()
+        REMOVED = []
+        for e in experiments[1::]:
+            for pname,pval in experiments[0]['params'].items():
+                try:
+                    pval2 = e['params'][pname]
+
+                    if pval2!=pval:
+                        if pname not in SAME:
+                            assert pname in REMOVED
+                        else:
+                            SAME.remove(pname)
+                            REMOVED.append(pname)
+
+                except KeyError:
+                    logger.debug("'display_only_varying_params=True was specified, but experiments do not all have the same parameters.")
+
+                    if pname not in SAME:
+                        assert pname in REMOVED
+                    else:
+                        SAME.remove(pname)
+                        REMOVED.append(pname)
+
+    else:
+        SAME = []
+                    
+    images = []
+    matches = 0
+    timesdata = dict.fromkeys(outputs['times'],False)
+    interestsdata = dict.fromkeys(outputs['interests'],False)
+    multiple_matches = []
+
+    for e in experiments:
+        directory = e['name']
+        row = {}    
+        # guess this could be done with one re, combining each interest with
+        # each time
+        for t in outputs['times']:
+            row[t]={}
+            for i in outputs['interests']:
+                found_match = False 
+                for f in glob.glob(directory+'/*%s*'%t+options['image_extension']):
+                    basename = os.path.basename(f)
+                    if re.search(i,basename):
+                        if found_match is True:
+                            multiple_matches.append(i)
+                            logger.debug("Multiple matches: ignoring '%s'"%basename)
+                        else:
+                            row[t][i] = f
+                            matches+=1
+                            timesdata[t]=True
+                            interestsdata[i]=True
+                            found_match = True
+        images.append(row)
+
+    multiple_matches = set(multiple_matches)
+    if len(multiple_matches)>0:
+        eyes = [" ".join(multiple_matches)]
+        raise ValueError("Multiple matches for interests %s; specify each listed interest more precisely, to allow it to be distinguished."%eyes)
+
+
+    for t,d in timesdata.items():
+        if d is False:
+            logger.info("No data for time %s"%t)
+            outputs['times'].remove(t)
+    for i,d in interestsdata.items():
+        if d is False:
+            logger.info("No data for interest '%s'"%i)
+            outputs['interests'].remove(i)
+
+    logger.debug("Number of images: %i"%matches)
+    if matches<1:
+        raise ValueError("No images.")
+
+
+    # hack: calc imwidth for no of images in row
+    # hack: height 2.2 - if gets too big, can't get two figs/page
+    imwidth = min(25.0/len(outputs['times']),
+                  options.get('max_figure_width',10.0))
+
+    linkcount = 0
+
+    #    for i,row in zip(interests,range(len(interests))):
+    #        caption+=" %s (row %i) "%(i,row)
+
+    intrests = ["%i- %s"%(i,intr) for i,intr in enumerate(outputs['interests'])]
+
+    
+    output = \
+    r"""
+    \documentclass[landscape,10pt,a4paper]{article}  
+    \usepackage[left=0.01cm,top=0.01cm,right=0.01cm,bottom=0.01cm,nohead,nofoot]{geometry}
+    \usepackage{graphicx}  
+    \usepackage{verbatim}
+    \title{%s} 
+    \author{%s}
+    \begin{document}
+    \maketitle
+    Figures key:\\%s
+    \clearpage
+    """%(F(data_location),F(str(conditions)),F(string.join(intrests,r"\\")))
+    cols = "c"*len(outputs['times'])
+
+    # include the config file
+    output+=r"\clearpage"
+    output+=r"\section*{config}"
+    output+=r"\verbatiminput{"+config_file+"}"
+    output+=r"\clearpage"
+
+    if options['display_only_varying_params']:
+        output+=r"\section*{fixed params}"
+        output+=r"%s"%F(str(dict([(pname,pval) for pname,pval in experiments[0]['params'].items() if pname in SAME])))
+        output+=r"\clearpage"
+
+    figcount = 0
+
+    for e,E in zip(images,experiments):
+        output += \
+    """
+    \\begin{figure}[ht] 
+    $
+    \\begin{array}{%s}
+    \\DeclareGraphicsExtensions{.png}
+    """%cols
+
+        for n,i in enumerate(outputs['interests']):
+            output+="%s"%n
+            for t in outputs['times']:
+                if t in e and i in e[t]:
+                    os.link(e[t][i], "%s/%i.png"%(temp_dir,linkcount))
+                else:
+                    Image.new('1',(1,1),color=255).save('%s/%i.png'%(temp_dir,linkcount))
+
+                output+= \
+    """
+    \includegraphics*[width=%1.2fcm,type=png,read=.png,ext=.png]{%s/%i}&
+    """%(imwidth,temp_dir,linkcount)
+
+                linkcount+=1
+            END = output.rfind("&")
+            output = output[0:END]+r"\\"
+
+        if options['print_full_dirname']:
+            caption = "%s"%E['name'].lstrip(data_dir)
+        else:
+            caption = "%s/%s"%(E['subdir'],E['title'])
+#        if options['print_params']:
+        caption+= " - %s"%dict([(pname,pval) for pname,pval in E['params'].items() if pname not in SAME])
+
+        output+=string.join(outputs['times'],"&")+r"\\"
+        output+=\
+    """
+    \end{array}$
+    \caption{%s}
+    \end{figure}
+    """%(F(caption))
+
+        figcount+=1
+
+    blanks = linkcount-matches
+    if blanks>0:
+        logger.debug("Number of empty images: %i"%(linkcount-matches))
+
+    logger.debug("Number of figures: %i"%figcount)
+
+    output += \
+    r"""
+    \end{document}
+    """
+    
+    f = open(subs['latex_file'],'w')
+    f.write(output)
+    f.close()
+
+    print "\nCompiling..."
+    compilation_command = options['compilation_command_template'].substitute(subs)
+    logger.debug("command='%s'"%compilation_command)
+    os.system(compilation_command)
+    os.system('tail %s'%(output_file+'.log'))
+    print 'If successful, PDF at %s'%output_file+'.pdf'
+    if options['pdf_viewer'] is not None:
+        os.system('%s %s'%(options['pdf_viewer'],output_file+'.pdf'))
+
+except:
+    raise
+finally:
+    shutil.rmtree(temp_dir)
+
+

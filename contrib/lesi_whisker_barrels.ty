@@ -1,0 +1,610 @@
+"""
+Version of lissom_whisker_barrels.ty based on the LESI model.
+
+$Id$
+"""
+__version__='$Revision: 8387$'
+
+import numpy
+from pylab import*
+import copy
+import fixedpoint
+from fixedpoint import FixedPoint
+
+from math import pi, sqrt, fmod
+
+from numpy import*
+import topo.pattern.basic
+from topo.pattern.basic import Gaussian,Sweeper
+import topo.pattern.random
+import random
+from random import*
+
+
+from topo.sheet.lissom import LISSOM, JointScaling
+from topo.sheet import GeneratorSheet
+from topo.projection.basic import CFProjection, SharedWeightCFProjection
+from topo.responsefn.optimized import CFPRF_DotProduct_opt
+from topo.base.cf import CFSheet
+from topo.base.boundingregion import BoundingBox
+from topo.learningfn.optimized import CFPLF_Hebbian_opt
+from topo.transferfn.optimized import CFPOF_DivisiveNormalizeL1_opt
+from topo.transferfn.misc import AttributeTrackingTF
+from topo.transferfn.basic import PiecewiseLinear, DivisiveNormalizeL1, HomeostaticMaxEnt, ActivityAveragingTF, PipelineTF
+from topo.transferfn.basic import GeneralizedLogistic, Sigmoid, HalfRectify
+from topo.pattern.basic import Gaussian, Composite, SeparatedComposite
+from topo import numbergen
+from topo.analysis.featureresponses import Feature, FeatureMaps
+
+import contrib.jsldefs
+from contrib.jsldefs import lesi_analysis_function 
+
+ 
+
+
+##########################################################################
+# Code that was previously written in Matlab and called externally
+##########################################################################
+w_x=locals().get('w_x',3)
+w_y=locals().get('w_y',3)  
+
+
+def generate_MEAs(w_x,w_y,g):
+        """
+        Generates the Maximally Effective Angles of the input units
+        """
+        
+        a=linspace(0.0,(2.0*pi)-((2.0*pi)/g**2),g**2)+(pi/g**2)
+        angs=reshape(repeat(a,w_x*w_y),[g**2,w_x,w_y])
+        MEAs=zeros([g**2,2,w_x,w_y])*0.0 
+        MEAs[:,0,:,:]=cos(angs)
+        MEAs[:,1,:,:]=sin(angs)
+        return [MEAs,angs]
+
+def shuffle_positions(w_x,w_y,g,r_seed):
+        """
+        Returns matrices of randomly permuted x indices and of y indices
+        which are essentially a look-up table for the assignmnet of firing rates to matrix co-ordinates
+        """
+        
+        seed(r_seed)
+        x_indices=zeros([g,g,w_x,w_y])  
+        y_indices=zeros([g,g,w_x,w_y])
+        for whisker_x in range(w_x):
+                for whisker_y in range(w_y):
+                        for k in range(g):
+                                a = arange(g)
+                                shuffle(a)
+                                x_indices[k,:,whisker_x,whisker_y]= a
+                                shuffle(a)
+                                y_indices[:,k,whisker_x,whisker_y]= a
+                                
+        seed(None)
+        return [x_indices,y_indices]
+
+
+def deflections(w_x,w_y,g,deflections,t,stimulus_tilt,whisker_length,MEAs):
+        """
+        Generates firing rates by stimuluating (w_x,w_y) shaped whiskerpad at (defs) angles, in the sequence corresponding to angle t.
+        Stimulus tilt should be specified in range 0 to 1; deflections and t in radians  
+        IMPORTANT: Need to figure out which way to normalize the sequence so as not to be skewing the angle to fit the dimensions of the whiskerpad
+        """
+        
+        tilt=stimulus_tilt*(arctan(whisker_length))
+        whi_x=(w_x-1)/2
+        whi_y=(w_y-1)/2
+        max_whi=max(whi_x,whi_y)
+        
+        [r,c]=meshgrid(linspace(-whi_y,whi_y,w_y),linspace(-whi_x,whi_x,w_x))
+        row=cos(t)*-r
+        col=sin(t)*c
+    
+        #whiskers = ((((row+col)*tan(tilt)))+(sqrt((whi_x**2)+(whi_y**2)))*whisker_length)/(2*((sqrt((whi_x**2)+(whi_y**2))*whisker_length)))#skews sequence to shape of pad
+        whiskers = ((((row+col)*tan(tilt)))+(sqrt((max_whi**2)+(max_whi**2)))*whisker_length)/(2*((sqrt((max_whi**2)+(max_whi**2))*whisker_length)))
+                
+        s=zeros([2,w_x,w_y])*0.0
+        s[0,:,:]=whiskers*cos(deflections) 
+        s[1,:,:]=whiskers*sin(deflections) 
+        
+        stimuli=zeros([g**2,2,w_x,w_y])*0.0
+        stimuli[:,:,:,:]=s
+        
+        
+        rates=clip(sum(MEAs*stimuli,1),0,1e7)
+        
+        return [rates,s,whiskers]
+ 
+
+def test_deflections(w_x,w_y,g,deflection,active_whisker,MEAs):
+        """
+        Generates firing rates at deflection magnitude=1 for the active whisker only 
+        """
+   
+        s_x=cos(deflection) 
+        s_y=sin(deflection) 
+        stimuli=zeros([g**2,2,w_x,w_y])*0.0
+        stimuli[:,:,floor(active_whisker/w_y),fmod(active_whisker,w_y)]=[s_x,s_y]
+
+        rates=clip(sum(MEAs*stimuli,1),0,1e7)
+   
+        return rates
+        
+
+def generate_input_pattern(w_x,w_y,g,rates,x_indices,y_indices):
+        """
+        Assign the input unit firing rates to the positions 
+        specified by the index matrices; i.e. their random locations 
+        within a barrelette on the input sheet
+        """
+        
+        pattern=zeros([w_x*g,w_y*g])*1.0
+        r=reshape(rates,[g,g,w_x,w_y])
+        for i in range(w_x*g):
+                for j in range(w_y*g):
+                        pattern[i][j]=r[x_indices[fmod(i,g),fmod(j,g),floor(i/g),floor(j/g)],y_indices[fmod(i,g),fmod(j,g),floor(i/g),floor(j/g)],floor(i/g),floor(j/g)]
+                        
+        return pattern
+        
+
+def ganglion_labels(w_x,w_y,g,angs,x_indices,y_indices):
+        """
+        Returns the MEA of each unit in the input pattern, as a value between 0 and 1 
+        IMPORTANT: Need to varify that this is working once the simulation is up and running
+        """
+        
+        MEA_labels=zeros([w_x*g,w_y*g])*1.0
+        a=angs/(2.0*pi)
+        r=reshape(a,[g,g,w_x,w_y])
+        for i in range(w_x*g):
+                for j in range(w_y*g):
+                        MEA_labels[i][j]=r[x_indices[fmod(i,g),fmod(j,g),floor(i/g),floor(j/g)],y_indices[fmod(i,g),fmod(j,g),floor(i/g),floor(j/g)],floor(i/g),floor(j/g)]
+        
+        return MEA_labels
+
+##########################################################################
+# Generating input patterns, and testing & plotting responses
+##########################################################################
+
+import param
+from topo.base.patterngenerator import PatternGenerator
+from topo.command.analysis import PatternPresenter, Subplotting
+from topo.base.functionfamily import CoordinateMapperFn
+from topo.coordmapper.basic import Grid
+
+import topo
+
+global_seed=locals().get("global_seed",1)
+random_seed_generator=numbergen.UniformRandom(lbound=0.0,ubound=1000,seed=global_seed*25)
+plot_deflections_on=param.Boolean(default=False)
+
+###############################################################################
+
+class WhiskerArray(PatternGenerator):
+        
+    w_x=param.Integer(default=3,bounds=(1,None),softbounds=(0.0,10.0),precedence=0.31,doc=""" Number of whiskers rows""")
+    w_y=param.Integer(default=3,bounds=(1,None),softbounds=(0.0,10.0),precedence=0.31,doc=""" Number of whisker columns""")
+    num_ganglion_cells = param.Integer(default=7,doc="""
+        Square root of the number of ganglion cells per whisker.""")
+    deflection = param.Number(default=pi/4,softbounds=(0.0,2*pi),doc="""
+        Whisker deflection angle, in radians""")
+    whisker = param.Integer(default=(0), doc="""
+        Which whiskers are to receive inputs; use (0) for all.""")
+    random_ganglion_seed = param.Number(default = global_seed*5489) # was just 5489 
+    edge=param.Number(default=1.0,doc=""" Border of the input vector plots""")
+    tilt = param.Number(default=0.0, doc="""
+        The tilt of the stimulus plane, + = front whiskers get larger deflection.""")
+    whisker_length = param.Number(default=5)
+    whisker_convergence = param.Number(default=1e7, doc="""
+        The convergence of the whisker deflection from the deflection angle""") 
+    flipped_whisker=param.Parameter([None,None])
+    flipped_whisker_convergence=param.Number(default=1e7)
+    save_plot=param.Boolean(default=False, doc='save the stimulus plot?')
+    anglotopy = param.Number(default=1e7, doc="""
+        Correlation between Angle and Somatotopy, i.e. variance of deflection angle from contact angle""")
+        
+        
+    def __init__(self,**params):
+        super(WhiskerArray,self).__init__(**params)
+        [self.MEAs,self.angs]=generate_MEAs(self.w_x,self.w_y,self.num_ganglion_cells)
+        [self.x_indices,self.y_indices]=shuffle_positions(self.w_x,self.w_y,self.num_ganglion_cells,self.random_ganglion_seed) 
+                                                                                                    
+    def function(self,params):
+        self.sequence_angle = params.get('deflection',self.deflection)
+        self.deflection_angles =numbergen.VonMisesRandom(mu=self.sequence_angle,kappa=params.get('anglotopy',self.anglotopy))
+        self.deflection_angle=self.deflection_angles()
+        
+        self.gens=numpy.ones(shape=(self.w_x,self.w_y),dtype=object)
+        for i in range(self.w_x):
+                for j in range(self.w_y):
+                                if [i,j]==params.get('flipped_whisker',self.flipped_whisker):
+                                        self.gens[i,j]=numbergen.VonMisesRandom(mu=self.deflection_angle,kappa=params.get('flipped_convergence',self.flipped_whisker_convergence),seed=random_seed_generator())
+                                else:
+                                        self.gens[i,j]=numbergen.VonMisesRandom(mu=self.deflection_angle,kappa=params.get('convergence',self.whisker_convergence),seed=random_seed_generator())
+        
+        self.whisker_deflections=numpy.ones(shape=(self.w_x,self.w_y))
+        for i in range(self.w_x):
+                for j in range(self.w_y):
+                        self.whisker_deflections[i,j]=self.gens[i,j]()
+
+        [self.firing_rates,self.stimuli,self.magnitudes]=deflections(self.w_x,self.w_y,self.num_ganglion_cells,self.whisker_deflections,self.sequence_angle,params.get('tilt',self.tilt),self.whisker_length,self.MEAs)
+        
+        inputs = generate_input_pattern(self.w_x,self.w_y,self.num_ganglion_cells,self.firing_rates,self.x_indices,self.y_indices)      
+        
+        if plot_deflections_on==True:
+                plot_deflections(self.w_x,self.w_y,self.edge,self.stimuli,self.magnitudes,self.sequence_angle,self.save_plot,params.get('tilt',self.tilt))
+        
+        return inputs
+
+    
+###############################################################################
+
+# JABALERT: This class should share a parent class with WhiskerArray, instead
+# of hard-coding references to parameter values of WhiskerArray.  The
+# results will all be entirely mixed up if any of the defaults in
+# WhiskerArray are changed after this class has been created.
+#
+class TestWhiskerArray(PatternGenerator):
+    """
+    A second WhiskerArray Class for testing the map.
+    """
+
+    deflection = param.Number(default=pi/4,softbounds=(0.0,2*pi),doc="""
+        Deflection of whisker array motion, in radians from 0 to 2*pi, assuming a stationary surface.""")
+    
+    whisker = param.Integer(default=0, doc="""
+        Which whiskers are to receive inputs; use 0 for all.""")
+        
+
+    def __init__(self,**params):
+        super(TestWhiskerArray,self).__init__(**params)
+        [self.MEAs,self.angs]=generate_MEAs(w_x,w_y,WhiskerArray.num_ganglion_cells)
+        [self.x_indices,self.y_indices]=shuffle_positions(w_x,w_y,WhiskerArray.num_ganglion_cells,WhiskerArray.random_ganglion_seed)
+
+    def function(self,params): 
+        deflection = params.get('deflection',self.deflection)
+        
+        self.firing_rates=test_deflections(w_x,w_y,WhiskerArray.num_ganglion_cells,self.deflection,self.whisker,self.MEAs)
+        
+        inputs=generate_input_pattern(w_x,w_y,WhiskerArray.num_ganglion_cells,self.firing_rates,self.x_indices,self.y_indices)
+        
+        return inputs
+
+
+###############################################################################
+
+from topo.base.sheetview import SheetView
+
+def color_MEAs():
+        """
+        Colorize the input units by their maximally effective angles. Finds a matrix of values (ranging 0-1) to represent MEAs (ranging 0-2*pi)
+        """
+        [MEAs,angs]=generate_MEAs(w_x,w_y,WhiskerArray.num_ganglion_cells)
+        [x_indices,y_indices]=shuffle_positions(w_x,w_y,WhiskerArray.num_ganglion_cells,WhiskerArray.random_ganglion_seed)  
+
+        for sheet in topo.sim.objects(GeneratorSheet).values():
+                ganglion_preferences=ganglion_labels(w_x,w_y,WhiskerArray.num_ganglion_cells,angs,x_indices,y_indices)
+        
+        new_view = SheetView((ganglion_preferences,sheet.bounds), sheet.name,sheet.precedence)
+        sheet.sheet_views['DeflectionPreference']=new_view 
+
+###############################################################################
+
+
+# Deflection preference map plotting, based on measure_or_pref in analysis.py
+
+def measure_deflection_pref(num_deflection=50,
+                            scale=0.3,offset=0.0,display=False,weighted_average=False,
+                            pattern_presenter=PatternPresenter(pattern_generator=TestWhiskerArray(),
+                                                               apply_output_fn=False,duration=0.175)):
+    """  
+    Measure deflection maps, by collating the responses to a set of
+    whisker deflections in different directions.
+    """
+
+    if num_deflection <= 0:
+        raise ValueError("num_deflection must be greater than 0")
+
+    else:
+         step_deflection=pi/num_deflection
+
+    feature_values = [Feature(name="whisker",range=(0, (w_x*w_y)-1
+),step=1,cyclic=False), Feature(name="deflection",range=(0.0,2*pi),step=step_deflection,cyclic=True)]
+        
+    param_dict = {"scale":scale,"offset":offset}
+    x=FeatureMaps(feature_values)
+    x.collect_feature_responses(pattern_presenter,param_dict,display,weighted_average)
+
+    Subplotting.set_subplots("Deflection",force=False)
+    
+
+from topo.plotting.plotgroup import create_plotgroup
+pg= create_plotgroup(name='Deflection Preference',category="Preference Maps",
+                     doc='Measure preference for direction stimulus for a lagged model.',
+                     pre_plot_hooks=[measure_deflection_pref])
+pg.add_plot('Deflection Preference',[('Hue','DeflectionPreference')])
+pg.add_plot('Deflection Preference&Selectivity',[('Hue','DeflectionPreference'),
+                                                   ('Confidence','DeflectionSelectivity')])
+pg.add_plot('Deflection Selectivity',[('Strength','DeflectionSelectivity')])
+pg.add_plot('Whisker Preference',[('Strength','WhiskerPreference')])
+pg.add_plot('Whisker Selectivity',[('Strength','WhiskerSelectivity')])
+pg.add_static_image('Color Key','topo/command/dfl_key_white_vert.png')
+
+
+def measure_sweep_pref(num_deflection=50,
+                    scale=0.3,offset=0.0,display=False,weighted_average=False,
+                    pattern_presenter=PatternPresenter(pattern_generator=WhiskerArray(w_x=w_x,w_y=w_y,tilt=1.0),apply_output_fn=False,duration=1.0)):
+    
+    """  
+    Measure deflection maps, by collating the responses to a set of
+    whisker deflections in different directions.
+    """
+    if num_deflection <= 0:
+        raise ValueError("num_deflection must be greater than 0")
+
+    else:
+         step_deflection=pi/num_deflection
+
+    feature_values = [Feature(name="deflection",range=(0.0,2*pi),step=step_deflection,cyclic=True)]
+        
+    param_dict = {"scale":scale,"offset":offset}
+    x=FeatureMaps(feature_values)
+    x.collect_feature_responses(pattern_presenter,param_dict,display,weighted_average)
+
+    Subplotting.set_subplots("Deflection",force=False)
+
+###############################################################################
+
+class BarrelMapper(CoordinateMapperFn):
+    """
+    Divides the 2D, assuming that barrels are of size 1.0. This borrows from Grid() 
+    """
+    xdensity = param.Number(default=1, bounds=(0,None), doc="""
+        This is actually w_x""")
+    ydensity = param.Number(default=1, bounds=(0,None), doc="""
+        This is actually w_y""")
+
+    def __call__(self,x,y):
+        xd=self.xdensity
+        yd=self.ydensity
+        
+        if x>0.0:
+                xquant=int(x+(rem(yd,2)*0.5))+((1-rem(yd,2))*0.5)
+        else:
+                xquant=int(x-(rem(yd,2)*0.5))-((1-rem(yd,2))*0.5)
+        
+        if y>0.0:       
+                yquant=int(y+(rem(xd,2)*0.5))+((1-rem(xd,2))*0.5)
+        else:
+                yquant=int(y-(rem(xd,2)*0.5))-((1-rem(xd,2))*0.5)
+        
+        return  xquant,yquant
+
+
+
+###############################################################################
+
+                               
+# Specify weight initialization, response function, and learning function
+numpy.random.seed((global_seed*3,global_seed*3))
+CFProjection.cf_shape = topo.pattern.basic.Constant()
+CFProjection.weights_generator = topo.pattern.basic.Constant()
+CFProjection.response_fn=CFPRF_DotProduct_opt()
+CFProjection.learning_fn=CFPLF_Hebbian_opt()
+CFProjection.weights_output_fn=CFPOF_DivisiveNormalizeL1_opt()
+
+###############################################################################
+"""
+#Sheet coordinates of units to track for debugging
+units=locals().get('units',[(0.0, 0.0), (0.25,0.25), (0.49,0.49)])
+
+#Quickly set sheet density, high_density = True in published figures.
+
+high_density=locals().get('hd',False)
+if high_density==True:
+    default_density = 100
+    default_retinal_density = 50 
+else:
+    default_density = locals().get('default_density',48)
+    default_retinal_density = locals().get('default_retinal_density',default_density/2)
+  
+#Smoothing value for exponential averaging
+smoothing=locals().get('smoothing',0.999)
+V1_smoothing=locals().get('V1_smoothing',0.999) # Allows different smoothing for averaging  V1 activity and averaging afferent activity.
+
+#Output functions: Sheets
+#LGN
+LGN_on_output_fn=HalfRectify()
+LGN_off_output_fn=HalfRectify()
+
+#Set targets based on frequency of occurance of V1 activation
+frequency=locals().get('frequency',2)
+
+#Target average afferent activity and target average V1 activity set based on
+#frequency and balance between afferent and lateral activity
+mu=locals().get('mu',0.0045*frequency)
+balance = locals().get('balance',4.0)
+afferent_target = locals().get('afferent_target',mu*balance)
+
+#Output Functions: Projections
+#Debugging
+
+#LGNOnAfferent
+LGNOn_Avg=ActivityAveragingTF(smoothing=smoothing,step=1)
+LGNOn_Tracker=AttributeTrackingTF(object=LGNOn_Avg,coordframe="topo.sim['V1Exc']", attrib_names=['x_avg'], units=units, step=1)
+LGNOn_OF = PipelineTF(output_fns=[LGNOn_Avg, LGNOn_Tracker])
+
+#LGNOffAfferent
+LGNOff_Avg=ActivityAveragingTF(smoothing=smoothing,step=1)
+LGNOff_Tracker=AttributeTrackingTF(object=LGNOff_Avg,coordframe="topo.sim['V1Exc']", attrib_names=['x_avg'], units=units, step=1)
+LGNOff_OF = PipelineTF(output_fns=[LGNOff_Avg, LGNOff_Tracker])
+
+#Latex_local
+LatExloc_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+LatExloc_Tracker=AttributeTrackingTF(object=LatExloc_Avg,coordframe="topo.sim['V1Exc']", attrib_names=['x_avg'], units=units, step=1)
+LatExloc_OF = PipelineTF(output_fns=[LatExloc_Avg, LatExloc_Tracker])
+
+#Latex
+LatEx_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+LatEx_Tracker=AttributeTrackingTF(object=LatEx_Avg,coordframe="topo.sim['V1Exc']", attrib_names=['x_avg'], units=units, step=1)
+LatEx_OF = PipelineTF(output_fns=[LatEx_Avg, LatEx_Tracker])
+
+#Ex_to_In_local
+ExtoInloc_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+ExtoInloc_Tracker=AttributeTrackingTF(object=ExtoInloc_Avg,coordframe="topo.sim['V1Inh']", attrib_names=['x_avg'], units=units, step=1)
+ExtoInloc_OF = PipelineTF(output_fns=[ExtoInloc_Avg, ExtoInloc_Tracker])
+
+#Ex_to_in
+ExtoIn_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+ExtoIn_Tracker=AttributeTrackingTF(object=ExtoIn_Avg,coordframe="topo.sim['V1Inh']", attrib_names=['x_avg'], units=units, step=1)
+ExtoIn_OF = PipelineTF(output_fns=[ExtoIn_Avg, ExtoIn_Tracker])
+
+#In_to_Ex
+IntoEx_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+IntoEx_Tracker=AttributeTrackingTF(object=IntoEx_Avg,coordframe="topo.sim['V1Exc']", attrib_names=['x_avg'], units=units, step=1)
+IntoEx_OF = PipelineTF(output_fns=[IntoEx_Avg, IntoEx_Tracker])
+
+#In_to_In
+IntoIn_Avg=ActivityAveragingTF(initial_average=0.0,smoothing=smoothing,step=1)
+IntoIn_Tracker=AttributeTrackingTF(object=IntoIn_Avg,coordframe="topo.sim['V1Inh']", attrib_names=['x_avg'], units=units, step=1)
+IntoIn_OF = PipelineTF(output_fns=[IntoIn_Avg, IntoIn_Tracker])
+
+#Function for generating Gaussian random initial weights
+def gauss_rand(size):
+    return topo.pattern.basic.Composite(operator=numpy.multiply, 
+                                         generators=[Gaussian(aspect_ratio=1.0, size=size),
+                                                     topo.pattern.random.UniformRandom()])
+
+#Smoothing value for exponential averaging
+smoothing=locals().get('smoothing',0.999)
+
+#Output functions: Sheets
+#LGN
+LGN_on_output_fn=HalfRectify()
+LGN_off_output_fn=HalfRectify()
+
+#Set targets based on frequency of occurance of V1 activation
+frequency=locals().get('frequency',2)
+
+#Target average afferent activity and target average V1 activity set based on
+#frequency and balance between afferent and lateral activity
+
+mu=locals().get('mu',0.0045*frequency)
+balance = locals().get('balance',4.0)
+afferent_target = locals().get('afferent_target',mu*balance)
+
+
+###########################################
+# build simulation
+
+#Sheet coordinates of units to track for debugging
+units=locals().get('units',[(0.0, 0.0), (0.25,0.25), (0.49,0.49)])
+
+Attrib_Tracker=AttributeTrackingTF(object="topo.sim['V1Exc']", attrib_names=['x_avg', 'sf', 'lr_sf', 'scaled_x_avg'], units=units)
+HE=HomeostaticMaxEnt(smoothing=0.999, eta=locals().get('eta',0.0002*15), mu=mu, step=15)
+V1_Tracker=AttributeTrackingTF(object=HE,coordframe="topo.sim['V1Exc']", attrib_names=['a', 'b','y_avg'], units=units, step=15)
+V1_OF_exc=PipelineTF(output_fns=[Attrib_Tracker, HE, V1_Tracker])
+
+S=HomeostaticMaxEnt(smoothing=0.999,  eta=locals().get('eta',0.0002*14), mu=2*mu, step=14)
+V1_Tracker_inh=AttributeTrackingTF(object=S,coordframe="topo.sim['V1Inh']", attrib_names=['a', 'b','y_avg'], units=units, step=14)
+V1_OF_inh=PipelineTF(output_fns=[S, V1_Tracker_inh])
+"""
+
+###########################################
+# Build simulation
+
+num_ganglion_cells=WhiskerArray.num_ganglion_cells
+von_mu = pi
+von_kappa=0.0
+barrel_density = 21.0
+
+topo.sim['Ganglia0']=GeneratorSheet(nominal_density=WhiskerArray.num_ganglion_cells,
+                                             input_generator=WhiskerArray(num_ganglion_cells=num_ganglion_cells,
+                                                deflection=numbergen.VonMisesRandom(mu=von_mu,kappa=von_kappa,seed=global_seed*76),
+                                                tilt=locals().get('tilt',UniformRandom(lbound=0.0,ubound=1.0,seed=global_seed*123)),
+                                                w_x=w_x, w_y=w_y,
+                                                flipped_whisker_convergence=locals().get('flipped_convergence',1e7),
+                                                flipped_whisker=locals().get('flipped_whisker',[None,None]),
+                                                whisker_convergence=locals().get('convergence',1e7),
+                                                anglotopy=locals().get('anglotopy',1e7)),
+                                             period=1.0, phase=0.05,
+                                             nominal_bounds=BoundingBox(points=[(-w_y/2.0,-w_x/2.0),(w_y/2.0,w_x/2.0)]))
+
+topo.sim['V1Exc'] = LISSOM(nominal_density=barrel_density,nominal_bounds=BoundingBox(points=[(-w_y/2.0,-w_x/2.0),(w_y/2.0,w_x/2.0)]),tsettle=15)
+                           #target=afferent_target,
+                           #smoothing=smoothing,
+                           #nominal_bounds=BoundingBox(radius=0.5),
+                           #target_lr=locals().get('target_lr',0.045)) # Parameters for the original JointScaling sheet
+
+
+topo.sim['V1Inh'] = LISSOM(nominal_density=barrel_density,nominal_bounds=BoundingBox(points=[(-w_y/2.0,-w_x/2.0),(w_y/2.0,w_x/2.0)]),tsettle=14) 
+
+## afferent -> V1 Exc
+topo.sim.connect('Ganglia0','V1Exc',delay=FixedPoint("0.05"),dest_port=('Activity','JointNormalize', 'Afferent'),
+                 connection_type=CFProjection,strength=1.0,name='Afferent0',
+                 weights_generator=topo.pattern.random.UniformRandom(), nominal_bounds_template=BoundingBox(radius=0.5),learning_rate=1.0,
+                 coord_mapper=BarrelMapper(xdensity=w_x,ydensity=w_y),cf_shape = topo.pattern.basic.Constant()
+                 )#learning_fn=CFPLF_PluginScaled()) 
+
+# Intra V1  connections
+
+#small_cf = (1.0/barrel_density)*2.0
+#big_cf = (1.0/barrel_density)*14.0
+small_cf = 0.03*3
+big_cf = 0.229*3
+
+topo.sim.connect('V1Exc','V1Exc', delay=0.05,
+                 connection_type=CFProjection,strength=locals().get('latexloc',0.7), name='LateralExcitatory_local',
+                 #output_fn=LatExloc_OF,
+                 weights_generator=topo.pattern.random.UniformRandom(),
+                 #weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template=BoundingBox(radius=small_cf), #radius was 0.03
+                 learning_rate=0.0)
+
+topo.sim.connect('V1Exc','V1Exc', delay=0.05,
+                 connection_type=CFProjection,strength =locals().get('latex',0.1), name='LateralExcitatory',
+                 #output_fn=LatEx_OF,
+                 weights_generator=topo.pattern.random.UniformRandom(),
+                 #weights_generator=gauss_rand(size=2*0.22917),
+                 nominal_bounds_template=BoundingBox(radius=big_cf), #radius was 0.229 
+                 learning_rate=0.0) #learning rate was 1.8087
+              
+topo.sim.connect('V1Exc','V1Inh', delay=0.05,
+                 connection_type=CFProjection,strength =locals().get('exinloc',0.6), name='V1Exc_to_V1Inh_local', 
+                 #output_fn=ExtoInloc_OF,
+                 weights_generator=topo.pattern.random.UniformRandom(),
+                 #weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.0),
+                 nominal_bounds_template = BoundingBox(radius=small_cf), #radius was 0.03
+                 learning_rate=0.0)
+
+topo.sim.connect('V1Exc','V1Inh', delay=0.05,
+                 connection_type=CFProjection,strength =locals().get('exin',1.0), name='V1Exc_to_V1Inh',
+                 #output_fn=ExtoIn_OF,
+                 weights_generator=topo.pattern.random.UniformRandom(),
+                 #weights_generator=gauss_rand(size=2*0.22917),
+                 nominal_bounds_template=BoundingBox(radius=big_cf), # radius was 0.229
+                 learning_rate=0.0) #1.8087
+
+topo.sim.connect('V1Inh','V1Exc', delay=0.05,
+                 connection_type=CFProjection,strength=locals().get('inex',-0.35), name='V1Inh_to_V1Exc',
+                 #output_fn=IntoEx_OF,
+                 weights_generator=topo.pattern.random.UniformRandom(),
+                 #weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template = BoundingBox(radius=small_cf), #radius was 0.03
+                 learning_rate=0.0)
+
+topo.sim.connect('V1Inh','V1Inh', delay=0.05,
+                 connection_type=CFProjection,strength=locals().get('inin',-0.35), name='V1Inh_to_V1Inh',
+                 #output_fn=IntoIn_OF,
+                 weights_generator=topo.pattern.random.UniformRandom(),
+                 #weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=0.04),
+                 nominal_bounds_template = BoundingBox(radius=small_cf), #radius was 0.03
+                 learning_rate=0.0)
+"""
+import topo.command.analysis
+topo.command.analysis.plotgroups["Orientation Preference"].pre_plot_hooks="measure_or_pref(pattern_presenter=PatternPresenter(pattern_generator=SineGrating(),apply_output_fn=True,duration=1.0))"
+
+import topo.analysis.featureresponses
+topo.analysis.featureresponses.FeatureMaps.selectivity_multiplier=1.0
+"""
+
+Subplotting.set_subplots("Deflection",force=False)

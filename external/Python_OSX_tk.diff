@@ -1,0 +1,11 @@
+--- Python-2.5.1/setup.py	2008-07-13 16:37:28.000000000 -0500
++++ Python-2.5.1/setup.py.new	2008-07-13 16:37:18.000000000 -0500
+@@ -1140,7 +1140,7 @@
+         # different the UNIX search logic is not sharable.
+         from os.path import join, exists
+         framework_dirs = [
+-            '/System/Library/Frameworks/',
++            #'/System/Library/Frameworks/',
+             '/Library/Frameworks',
+             join(os.getenv('HOME'), '/Library/Frameworks')
+         ]

@@ -1,0 +1,12 @@
+--- scipy-0.7.1/scipy/io/dumbdbm_patched.py	2009-04-15 14:21:56.000000000 +0100
++++ scipy-0.7.1/scipy/io/dumbdbm_patched.py.new	2009-11-18 00:17:21.000000000 +0000
+@@ -77,6 +77,9 @@
+         f.close()
+         return dat
+ 
++    def __contains__(self, key): 
++ 	return key in self._index 
++
+     def _addval(self, val):
+         f = _open(self._datfile, 'rb+')
+         f.seek(0, 2)

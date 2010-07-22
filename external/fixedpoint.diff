@@ -1,0 +1,70 @@
+*** fixedpoint.py~	2005-10-25 10:00:00.000000000 +0100
+--- fixedpoint.py	2005-10-25 09:59:10.000000000 +0100
+***************
+*** 158,164 ****
+          return None
+  
+  # The default value for the number of decimal digits carried after the
+! # decimal point.  This only has effect at compile-time.
+  DEFAULT_PRECISION = 2
+  
+  class FixedPoint(object):
+--- 158,164 ----
+          return None
+  
+  # The default value for the number of decimal digits carried after the
+! # decimal point.  This only has effect at instance initialization.
+  DEFAULT_PRECISION = 2
+  
+  class FixedPoint(object):
+***************
+*** 167,174 ****
+          self.n is a long; self.p is an int
+      """
+      __slots__ = ['n', 'p']
+!     def __init__(self, value=0, precision=DEFAULT_PRECISION):
+          self.n = self.p = 0
+          self.set_precision(precision)
+          p = self.p
+  
+--- 167,178 ----
+          self.n is a long; self.p is an int
+      """
+      __slots__ = ['n', 'p']
+! 
+!     def __init__(self, value=0, precision=None):
+          self.n = self.p = 0
++         if precision == None:
++             precision = DEFAULT_PRECISION
++            
+          self.set_precision(precision)
+          p = self.p
+  
+***************
+*** 312,317 ****
+--- 316,340 ----
+      def __deepcopy__(self, memo):
+          return self.copy()
+  
++     # Basic support for pickling
++     def __getstate__(self):
++         state={}
++         try: 
++             for k in self.__slots__:
++                 state[k] = getattr(self,k)
++         except AttributeError:
++             pass
++         return state
++ 
++     def __setstate__(self,state):
++         for k,v in state.items():
++             setattr(self,k,v)
++         self.unpickle()
++ 
++     def unpickle(self):
++         pass
++ 
++ 
+      def __cmp__(self, other):
+          xn, yn, p = _norm(self, other, FixedPoint=type(self))
+          return cmp(xn, yn)

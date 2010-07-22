@@ -1,0 +1,250 @@
+from __future__ import with_statement
+"""
+A LISSOM-based happy face (cartoon face with a curved mouth) simulation.
+
+This model is currently based on lissom_fsa.ty. It aims to model
+cartoon face curvature aftereffect studied in the work of
+
+Xu et al. Adaptation across the cortical hierarchy: low-level
+curve adaptation affects high-level facial-expression judgments.
+Journal of Neuroscience (2008) vol. 28 (13) pp. 3374-83
+
+It is under active development.
+
+$Id$
+"""
+__version__='$Revision: 9831 $'
+
+
+from math import pi, sqrt
+import numpy
+
+import param
+
+from topo import learningfn,numbergen,transferfn,pattern,projection,responsefn,sheet 
+
+import topo.learningfn.optimized
+import topo.learningfn.projfn 
+import topo.transferfn.optimized 
+import topo.pattern.random
+import topo.responsefn.optimized 
+import topo.sheet.lissom
+import topo.sheet.optimized
+
+from topo.base.patterngenerator import PatternGenerator
+
+from topo.plotting.plotgroup import create_plotgroup
+#from topo.command.analysis import PatternPresenter, Feature, Subplotting
+from topo.misc.util import frange
+from topo.analysis.featureresponses import FeatureMaps, Feature, PatternPresenter, Subplotting
+from topo.analysis.featureresponses import SinusoidalMeasureResponseCommand, PositionMeasurementCommand, SingleInputResponseCommand, MeasureResponseCommand
+
+from topo.misc.patternfn import float_error_ignore
+
+from topo.misc.commandline import global_params as p
+p.add(
+
+    retina_density=param.Number(default=48.0,bounds=(0,None),
+        inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for the retina."""),
+
+    lgn_density=param.Number(default=24.0,bounds=(0,None),
+        inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for the LGN."""),
+
+    cortex_density=param.Number(default=24.0,bounds=(0,None),
+        inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for V1."""))
+
+
+class HappyFace(pattern.Composite):
+    """
+    2D cartoon face pattern.
+    
+    The face has a round outline, two eyes and a curved mouth. It is
+    parameterized by the 'happiness' value, which ranges from 1.0
+    (happy, concave) to -1.0 (sad, convex). Happiness 0.0 represents a
+    straight line.
+    """
+
+    happiness = param.Number(default=1.0, bounds=(-1.0, 1.0),
+        precedence=0.60, doc="""
+        Happiness value that determines whether the mouth
+        is concave (happy, positive) or convex
+        (sad, negative).""")
+
+    eyes_smoothing = param.Number(default=3.0*1.21/1.7/24.0,
+        bounds=(0.0, None), softbounds=(0.0, 0.5),
+        precedence=0.61, doc="Width of the Gaussian fall-off of two eyes.")
+
+    face_thickness = param.Number(default=0.002,bounds=(0.0, None), softbounds=(0.0,0.5),
+        precedence=0.62, doc="Thickness (line width) of face.")
+
+    face_smoothing = param.Number(default=0.02, bounds=(0.0, None), softbounds=(0.0, 0.5),
+        precedence=0.63, doc="Width of the Gaussian fall-off of face.")
+
+    mouth_thickness = param.Number(default=0.002,bounds=(0.0, None), softbounds=(0.0,0.5),
+        precedence=0.64, doc="Thickness (line width) of mouth.")
+
+    mouth_smoothing = param.Number(default=0.05, bounds=(0.0, None), softbounds=(0.0, 0.5),
+        precedence=0.65, doc="Width of the Gaussian fall-off of mouth.")
+
+
+    def _advance_pattern_generators(self, generators):
+        """Constructs combined pattern out of the individual ones."""
+
+        sb=1.0 / 24.0
+        mouth_width=20.8 / 2.0
+        mouth_curvature=self.happiness / 2.0 # less height, needs revision
+        mouth_y=-7.5 - 1.5 * self.happiness
+
+        lefteye = pattern.Gaussian(aspect_ratio=1.0, x=-4.5*sb, y=1.0*sb,
+                                   size=self.eyes_smoothing, scale=0.5, offset=0.5059)
+        righteye= pattern.Gaussian(aspect_ratio=1.0, x=4.5*sb, y=1.0*sb,
+                                   size=self.eyes_smoothing, scale=0.5, offset=0.5059)
+        face    = pattern.Ring(aspect_ratio=1.0, x=0.0*sb, y=-3.0*sb,
+                               thickness=self.face_thickness, smoothing=self.face_smoothing,
+                               size=2.0*1.21/1.7*15.0*sb)
+        mouth   = pattern.Curve(x=0.0*sb, y=mouth_y*sb,
+                                size=mouth_width*sb, curvature=mouth_curvature, size_type='constant_width',
+                                thickness=self.mouth_thickness, smoothing=self.mouth_smoothing)
+
+        return [lefteye, righteye, face, mouth]
+
+
+class measure_happiness(MeasureResponseCommand):
+    """Measure a face happiness preference map by collating the response to patterns."""
+
+    subplot = param.String("Happiness")
+    
+    def _feature_list(self,p):
+        return [Feature(name="happiness", range=(-1.0, 1.0), step=0.1, cyclic=False)]
+
+
+
+pg= create_plotgroup(name='Face Happiness',category="Preference Maps",
+             doc='Measure preference for happy or sad faces.',
+             pre_plot_hooks=[measure_happiness.instance(display=True, weighted_average=False, pattern_presenter=PatternPresenter(pattern_generator=HappyFace(), apply_output_fns=True, duration=1.0))])
+pg.add_plot('Happiness Preference',[('Strength','HappinessPreference')])
+pg.add_plot('Happiness Selectivity',[('Strength','HappinessSelectivity')])
+
+
+
+### Specify weight initialization, response function, and learning function
+projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
+projection.CFProjection.weights_generator=pattern.Constant()
+projection.CFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+projection.CFProjection.learning_fn=learningfn.optimized.CFPLF_Hebbian_opt()
+projection.CFProjection.weights_output_fns=[transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
+projection.SharedWeightCFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+
+
+### Input patterns
+num_inputs=1
+inputs=[HappyFace(happiness=numbergen.UniformRandom(lbound=-1.0, ubound=1.0, seed=91 + i),
+                    size=2.0, orientation=0.0,
+                    #orientation=numbergen.UniformRandom(lbound=17.0/36.0*pi,ubound=19.0/36.0*pi,
+                    #                                    seed=56+i),
+                    x=numbergen.UniformRandom(lbound=-65.0/48.0, ubound=65.0/48.0, seed=12+i),
+                    y=numbergen.UniformRandom(lbound=-65.0/48.0, ubound=65.0/48.0, seed=34+i))
+        for i in xrange(num_inputs)]
+combined_inputs=pattern.SeparatedComposite(min_separation=1.722972972972973, generators= inputs)
+
+# Draw multiple curves simultaneously
+#combined_inputs=pattern.Composite(generators= [pattern.Curve(x=0.0, y=i * 1.5, size=2.0,
+#    curvature=i, thickness=0.2, smoothing=0.2)
+#    for i in frange(-0.5, 0.6, 0.1)])
+
+
+### Sheets
+topo.sim['Retina']=sheet.GeneratorSheet(
+    nominal_density=p.retina_density,
+    nominal_bounds=sheet.BoundingBox(radius=1.77),
+    input_generator=combined_inputs,period=1.0,phase=0.05)
+
+topo.sim['LGNOn']=sheet.CFSheet(
+    nominal_density=p.lgn_density,    
+    nominal_bounds=sheet.BoundingBox(radius=1.542),
+    output_fns=[transferfn.PiecewiseLinear(lower_bound=0.0,upper_bound=1.0)])
+
+topo.sim['LGNOff']=sheet.CFSheet(
+    nominal_density=p.lgn_density,    
+    nominal_bounds=sheet.BoundingBox(radius=1.542),
+    output_fns=[transferfn.PiecewiseLinear(lower_bound=0.0,upper_bound=1.0)])
+
+topo.sim['FSA']=sheet.lissom.LISSOM(
+    nominal_density=p.cortex_density,tsettle=9,
+    nominal_bounds=sheet.BoundingBox(radius=0.5),
+    output_fns=[transferfn.PiecewiseLinear(lower_bound=0.1,upper_bound=0.65)])
+
+
+
+### Connections
+
+# DoG weights for the LGN
+centerg   = pattern.Gaussian(size=0.11079,aspect_ratio=1.0,
+                             output_fns=[transferfn.DivisiveNormalizeL1(norm_value=2.33)])
+surroundg = pattern.Gaussian(size=0.17725,aspect_ratio=1.0,
+                             output_fns=[transferfn.DivisiveNormalizeL1(norm_value=2.33)])
+
+on_weights = pattern.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = pattern.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+
+topo.sim.connect(
+    'Retina','LGNOn',delay=0.05,
+    connection_type=projection.SharedWeightCFProjection,strength=10.199999999999999,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.235),name='RetinaToLGNOn',
+    weights_generator=on_weights)
+
+topo.sim.connect(
+    'Retina','LGNOff',delay=0.05,
+    connection_type=projection.SharedWeightCFProjection,strength=10.199999999999999,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.235),name='RetinaToLGNOff',
+    weights_generator=off_weights)
+
+topo.sim.connect(
+    'LGNOn','FSA',delay=0.05, dest_port=('Activity','JointNormalize', 'Afferent'),
+    connection_type=projection.CFProjection,strength=1.0700000000000001,name='LGNOnAfferent',
+    weights_generator=pattern.Gaussian(aspect_ratio=1.0, size=0.4167),
+    nominal_bounds_template=sheet.BoundingBox(radius=1.0625),learning_rate=5.0)
+
+topo.sim.connect(
+    'LGNOff','FSA',delay=0.05, dest_port=('Activity','JointNormalize', 'Afferent'),
+    connection_type=projection.CFProjection,strength=1.07,name='LGNOffAfferent',
+    weights_generator=pattern.Gaussian(aspect_ratio=1.0, size=0.4167),
+    nominal_bounds_template=sheet.BoundingBox(radius=1.0625),learning_rate=5.0,)
+
+topo.sim.connect(
+    'FSA','FSA',delay=0.05,name='LateralExcitatory',
+    connection_type=projection.CFProjection,strength=0.9,
+    weights_generator=pattern.Gaussian(aspect_ratio=1.0, size=0.4167),
+    nominal_bounds_template=sheet.BoundingBox(radius=0.166666666667),learning_rate=3.1856)
+
+topo.sim.connect(
+    'FSA','FSA',delay=0.05,name='LateralInhibitory',
+    connection_type=projection.CFProjection,strength=-0.9,
+    weights_generator=pattern.Gaussian(aspect_ratio=1.0, size=0.4167),
+    nominal_bounds_template=sheet.BoundingBox(radius=0.416666666667),learning_rate=2.3627)
+
+
+
+### Actions scheduled to occur as the simulation proceeds.
+### These have not been matched to the published simulation.
+sheet.lissom.schedule_events("topo.sim['FSA']",st=1.0/num_inputs,aff_name="Afferent",ars=100)
+
+# default locations for model editor
+topo.sim['FSA'   ].layout_location=(306,225)
+topo.sim['LGNOn' ].layout_location=(432,345)
+topo.sim['LGNOff'].layout_location=(150,345)
+topo.sim['Retina'].layout_location=(279,500)
+
+
+# Measure feature maps based on unthresholded initial response for
+# speed and reliability
+from topo.analysis.featureresponses import MeasureResponseCommand
+MeasureResponseCommand.duration=0.175
+MeasureResponseCommand.apply_output_fns=False
