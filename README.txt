@@ -9,6 +9,10 @@ This program is free, open-source software available under the BSD
 license (see LICENSE.txt).
 
 
+Note that Topographica is already packaged for various platforms;
+Topographica.org/Downloads provides links to these. This document
+instead applies to the complete topographica source code.
+
 Before you start, make sure that you have a copy of Topographica in a
 directory where you have at least 1200MB of disk space available.
 
@@ -30,6 +34,9 @@ www.topographica.org.  (The doc/ directory is just a copy of the
 www.topographica.org site, although the web site will not necessarily
 match this particular copy of Topographica.)
 
+Alternatively, for each <file>.html you can simply read the
+corresponding source file <file>_text.php in a text editor.
+
 
 BUILDING TOPOGRAPHICA
 
@@ -40,12 +47,9 @@ source.  This approach makes the initial compilation time longer and
 the simulator directory larger, but it minimizes the changes necessary
 for specific platforms and operating system versions.
 
-For specific instructions on building Topographica on each platform,
-see doc/Downloads/index.html.  There may also be additional
-platform-specific information in doc/Downloads/<platform>.html.  If
-you haven't compiled the documentation, for each <file>.html you can
-simply read the corresponding source file <file>_text.php in a text
-editor. 
+For specific instructions, see the "Build all Topographica's
+dependencies" and "Building Topographica" sections in
+doc/Developer_Manual/installation.html.
 
 
 USING TOPOGRAPHICA
