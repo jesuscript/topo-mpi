@@ -9,9 +9,11 @@ This program is free, open-source software available under the BSD
 license (see LICENSE.txt).
 
 
-Note that Topographica is already packaged for various platforms;
-Topographica.org/Downloads provides links to these. This document
-instead applies to the complete topographica source code.
+This document describes how to start with Topographica from the
+complete set of source code, which includes source code packages for
+all its dependencies.  Most users will instead want to start with the
+pre-packaged distributions available for most platforms; see
+topographica.org/Downloads for links and instructions.
 
 Before you start, make sure that you have a copy of Topographica in a
 directory where you have at least 1200MB of disk space available.
