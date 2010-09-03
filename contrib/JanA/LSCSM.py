@@ -1,116 +1,33 @@
-from scipy.optimize import fmin_ncg, anneal, fmin_cg, fmin_bfgs, fmin_tnc
+from scipy.optimize import fmin_ncg, anneal, fmin_cg, fmin_bfgs, fmin_tnc, fmin_l_bfgs_b
 import __main__
 import numpy
 import pylab
 import sys
 sys.path.append('/home/antolikjan/topographica/Theano/')
-import theano 
+import theano
+theano.config.floatX='float32' 
+#theano.config.warn.sum_sum_bug=False
 from theano import tensor as T
 from topo.misc.filepath import normalize_path, application_path
 from contrib.modelfit import *
 import contrib.dd
 import contrib.JanA.dataimport
 
+#profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
+
 
 class LSCSM(object):
-	
-	def __init__(self,XX,YY,num_lgn):
-	    (self.num_pres,self.image_size) = numpy.shape(XX)
-	    self.num_lgn = num_lgn
-	    self.ss = numpy.sqrt(self.image_size)
-
-	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).T.flatten())	
-	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).flatten())
-	    self.Y = theano.shared(YY)
-    	    self.X = theano.shared(XX)
-	    
-	    self.K = T.dvector('K')
-	    #self.KK = theano.printing.Print(message='My mesasge')(self.K)
-	    self.x = self.K[0:self.num_lgn]
-	    self.y = self.K[self.num_lgn:2*self.num_lgn]
-	    self.a = self.K[2*self.num_lgn:3*self.num_lgn]
-	    self.s_c = self.K[3*self.num_lgn:4*self.num_lgn]
-	    self.s_s = self.K[4*self.num_lgn:5*self.num_lgn]
-	    self.n = self.K[5*self.num_lgn]
-	    
-	    self.output = T.dot(self.X,T.mul(self.a[0],T.exp(-T.div_proxy(((self.xx - self.x[0])**2 + (self.yy - self.y[0])**2),self.s_c[0])).T) - T.mul(self.a[0],T.exp(-T.div_proxy(((self.xx - self.x[0])**2 + (self.yy - self.y[0])**2),self.s_s[0] )).T))
-	    
-	    for i in xrange(1,self.num_lgn):
-		self.output = self.output + T.dot(self.X,T.mul(self.a[i],T.exp(-T.div_proxy(((self.xx - self.x[i])**2 + (self.yy - self.y[i])**2),self.s_c[i] )).T) - T.mul(self.a[i],T.exp(-T.div_proxy(((self.xx - self.x[i])**2 + (self.yy - self.y[i])**2),self.s_s[i] )).T))
-	    
-	    self.model = T.exp(self.output-self.n)
-	    self.loglikelyhood = T.sum(self.model) - T.sum(T.dot(self.Y.T,  T.log(self.model))) 
-
-	def func(self):
-	    return theano.function(inputs=[self.K], outputs=self.loglikelyhood) 
-			
-	def der(self):
-	    g_K = T.grad(self.loglikelyhood, self.K)
-	    return theano.function(inputs=[self.K], outputs=g_K)
- 
- 	def hess(self):
-            g_K = T.grad(self.loglikelyhood, self.K,consider_constant=[self.Y,self.X])
-	    H, updates = theano.scan(lambda i,v: T.grad(g_K[i],v), sequences= T.arange(g_K.shape[0]), non_sequences=self.K)
-  	    return theano.function(inputs=[self.K], outputs=H)
-	
-	def response(self,X,kernels):
-	    self.IN = theano.shared(X)	
-	    
-	    self.output = T.dot(self.IN,T.mul(self.a[0],T.exp(-T.div_proxy(((self.xx - self.x[0])**2 + (self.yy - self.y[0])**2),self.s_c[0])).T) - 		T.mul(self.a[0],T.exp(-T.div_proxy(((self.xx - self.x[0])**2 + (self.yy - self.y[0])**2),self.s_s[0] )).T))
-	    
-	    for i in xrange(1,self.num_lgn):
-		self.output = self.output + T.dot(self.IN,T.mul(self.a[i],T.exp(-T.div_proxy(((self.xx - self.x[i])**2 + (self.yy - self.y[i])**2),self.s_c[i] )).T) - self.X,T.mul(self.a[i],T.exp(-T.div_proxy(((self.xx - self.x[i])**2 + (self.yy - self.y[i])**2),self.s_s[i] )).T))
-			        
-	    self.model = T.exp(self.output-self.n)
-	    	
-	    resp =  theano.function(inputs=[self.K], outputs=self.model)
-	    
-	    (a,b) = numpy.shape(kernels)
-	    (c,d) = numpy.shape(X)
-	    
-	    responses = numpy.zeros((c,a))
-	    
-	    for i in xrange(a):
-		responses[:,i] = resp(kernels[i,:]).T
-	    
-	    return responses
-	    
-	
-	def returnRFs(self,kernels):
-	    (k,l) = numpy.shape(kernels)
-            rfs = numpy.zeros((k,self.image_size))
-	    
-	    xx = numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).T.flatten()	
-	    yy = numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).flatten()
-	    			    
-			    
-	    for j in xrange(k):
-   		x = kernels[j,0:self.num_lgn]
-	        y = kernels[j,self.num_lgn:2*self.num_lgn]
-	        a = kernels[j,2*self.num_lgn:3*self.num_lgn]
-		sc = kernels[j,3*self.num_lgn:4*self.num_lgn]
-		ss = kernels[j,4*self.num_lgn:5*self.num_lgn]
-		print x
-		print y
-		print a
-	    	for i in xrange(0,self.num_lgn):
-		    rfs[j,:] += a[i]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i]) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])) 
-	    
-	    return rfs
-	
-	
-class LSCSM1(object):
 	def __init__(self,XX,YY,num_lgn,num_neurons):
 	    (self.num_pres,self.image_size) = numpy.shape(XX)
 	    self.num_lgn = num_lgn
 	    self.num_neurons = num_neurons
-	    self.ss = numpy.sqrt(self.image_size)
+	    self.size = numpy.sqrt(self.image_size)
 
-	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).T.flatten())	
-	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).flatten())
+	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten())	
+	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten())
 	    self.Y = theano.shared(YY)
     	    self.X = theano.shared(XX)
-	    
+	    self.of = __main__.__dict__.get('OF','Exp')
 	    self.K = T.dvector('K')
 	    #self.KK = theano.printing.Print(message='My mesasge')(self.K)
 	    self.x = self.K[0:self.num_lgn]
@@ -122,22 +39,39 @@ class LSCSM1(object):
 	    lgn_output,updates = theano.scan(lambda i,x,y,s: T.dot(self.X,T.exp(-T.div_proxy(((self.xx - x[i])**2 + (self.yy - y[i])**2),s[i] )).T), sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.s])
 	    
 	    self.output = T.dot(lgn_output.T,self.a)
-	    self.model = T.exp(self.output-self.n)
+	    self.model = self.construct_of(self.output-self.n)
 	    
-	    self.loglikelyhood = T.sum(T.sum(self.model)) - T.sum(T.sum(self.Y * T.log(self.model))) 
+	    if __main__.__dict__.get('LL',True):
+	       self.loglikelyhood = T.sum(self.model) - T.sum(self.Y * T.log(self.model))
+	    else:
+	       self.loglikelyhood = T.sum(T.sqr(self.model.T - self.Y)) 
 	
 	def func(self):
-	    return theano.function(inputs=[self.K], outputs=self.loglikelyhood) 
+	    return theano.function(inputs=[self.K], outputs=self.loglikelyhood,mode='FAST_RUN') 
 			
 	def der(self):
 	    g_K = T.grad(self.loglikelyhood, self.K)
-	    return theano.function(inputs=[self.K], outputs=g_K)
+	    return theano.function(inputs=[self.K], outputs=g_K,mode='FAST_RUN')
 	
 	def response(self,X,kernels):
 	    self.X.value = X
 	    
-	    resp = theano.function(inputs=[self.K], outputs=self.model)
+	    resp = theano.function(inputs=[self.K], outputs=self.model,mode='FAST_RUN')
 	    return resp(kernels)	
+	
+	def construct_of(self,inn):
+    	    if self.of == 'Exp':
+	       return T.exp(inn)
+	    elif self.of == 'Sigmoid':
+	       return 1.0 / (1 + T.exp(-inn)) 
+	    elif self.of == 'Square':
+	       return T.sqr(inn)
+	    elif self.of == 'ExpExp':
+	       return T.exp(T.exp(inn))  	
+	    elif self.of == 'ExpSquare':
+	       return T.exp(T.sqr(inn))
+	    elif self.of == 'LogisticLoss':
+	       return __main__.__dict__.get('LogLossCoef',1.0)*T.log(1+T.exp(__main__.__dict__.get('LogLossCoef',1.0)*inn))
 	
 	def returnRFs(self,K):
 	    x = K[0:self.num_lgn]
@@ -148,8 +82,8 @@ class LSCSM1(object):
 
             rfs = numpy.zeros((self.num_neurons,self.image_size))
 	    
-	    xx = numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).T.flatten()	
-	    yy = numpy.repeat([numpy.arange(0,self.ss,1)],self.ss,axis=0).flatten()
+	    xx = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten()	
+	    yy = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten()
 	    			    
             print x
 	    print y
@@ -159,6 +93,195 @@ class LSCSM1(object):
 	    for j in xrange(self.num_neurons):
 	    	for i in xrange(0,self.num_lgn):
 		    rfs[j,:] += a[i,j]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/s[i])
+	    
+	    
+	    
+	    return rfs
+
+	
+class LSCSM1(object):
+	def __init__(self,XX,YY,num_lgn,num_neurons):
+	    (self.num_pres,self.image_size) = numpy.shape(XX)
+	    self.num_lgn = num_lgn
+	    self.num_neurons = num_neurons
+	    self.size = numpy.sqrt(self.image_size)
+
+	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten())	
+	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten())
+	    self.Y = theano.shared(YY)
+    	    self.X = theano.shared(XX)
+	    
+	    self.v1of = __main__.__dict__.get('V1OF','Exp')
+	    self.lgnof = __main__.__dict__.get('LGNOF','Exp')
+	    
+	    self.K = T.dvector('K')
+	    
+	    self.x = self.K[0:self.num_lgn]
+	    self.y = self.K[self.num_lgn:2*self.num_lgn]
+	    self.sc = self.K[2*self.num_lgn:3*self.num_lgn]
+	    self.ss = self.K[3*self.num_lgn:4*self.num_lgn]
+	    
+	    idx = 4*self.num_lgn
+	    
+	    if not __main__.__dict__.get('BalancedLGN',True):
+		    self.rc = self.K[idx:idx+self.num_lgn]
+		    self.rs = self.K[idx+self.num_lgn:idx+2*self.num_lgn]
+		    idx = idx  + 2*self.num_lgn
+	    
+	    #self.x = theano.printing.Print(message='x:')(self.x)
+	    #self.y = theano.printing.Print(message='y:')(self.y)
+	    #self.sc = theano.printing.Print(message='sc:')(self.sc)
+	    #self.ss = theano.printing.Print(message='ss:')(self.ss)
+	    
+	    
+	    
+	    
+	    if __main__.__dict__.get('LGNTreshold',False):
+	    	self.ln = self.K[idx:idx + self.num_lgn]
+		idx += self.num_lgn
+	    
+	    self.a = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+	    
+	    idx +=  num_neurons*self.num_lgn
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       self.a1 = T.reshape(self.K[idx:idx+num_neurons*num_neurons],(self.num_neurons,self.num_neurons))
+	       idx = idx+num_neurons*num_neurons
+	    
+	    self.n = self.K[idx:idx+self.num_neurons]
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       self.n1 = self.K[idx+self.num_neurons:idx+2*self.num_neurons]
+	    
+	    if __main__.__dict__.get('BalancedLGN',True):
+		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
+	    
+	    else:
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+	        lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
+	    
+	    #lgn_output = theano.printing.Print(message='lgn output:')(lgn_output)
+	    
+	    lgn_output = lgn_output.T
+	    
+	    if __main__.__dict__.get('LGNTreshold',False):
+	       lgn_output = lgn_output - self.ln.T
+ 
+	       
+	    self.output = T.dot(self.construct_of(lgn_output,self.lgnof),self.a)
+	    
+	    #self.output = theano.printing.Print(message='Output1:')(self.output)
+	    
+	    #self.n = theano.printing.Print(message='N:')(self.n)
+	    
+	    #self.output = theano.printing.Print(message='Output2:')(self.output)
+	    
+	    self.model_output = self.construct_of(self.output-self.n,self.v1of)
+	    
+	    #self.model_output = theano.printing.Print(message='model output:')(self.model_output)
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n1,self.v1of) 
+	    
+   	    if __main__.__dict__.get('LL',True):
+	       ll = T.sum(self.model_output) - T.sum(self.Y * T.log(self.model_output))
+	    else:
+	       ll = T.sum(T.sqr(self.model_output - self.Y)) 
+
+	    #ll = theano.printing.Print(message='LL:')(ll)
+	    self.loglikelyhood =  ll
+	
+	def func(self):
+	    return theano.function(inputs=[self.K], outputs=self.loglikelyhood,mode='FAST_RUN')
+	
+	def der(self):
+	    g_K = T.grad(self.loglikelyhood, self.K)
+	    return theano.function(inputs=[self.K], outputs=g_K,mode='FAST_RUN')
+	
+	def response(self,X,kernels):
+	    self.X.value = X
+	    
+	    resp = theano.function(inputs=[self.K], outputs=self.model_output,mode='FAST_RUN')
+	    return resp(kernels)	
+	
+	def construct_of(self,inn,of):
+   	    if of == 'Linear':
+	       return inn
+    	    if of == 'Exp':
+	       return T.exp(inn)
+	    elif of == 'Sigmoid':
+	       return 5.0 / (1.0 + T.exp(-inn)) 
+	    elif of == 'Square':
+	       return T.sqr(inn)
+	    elif of == 'ExpExp':
+	       return T.exp(T.exp(inn))  	
+	    elif of == 'ExpSquare':
+	       return T.exp(T.sqr(inn))
+	    elif of == 'LogisticLoss':
+	       return __main__.__dict__.get('LogLossCoef',1.0)*T.log(1+T.exp(__main__.__dict__.get('LogLossCoef',1.0)*inn))
+
+	
+	def returnRFs(self,K):
+	    x = K[0:self.num_lgn]
+	    y = K[self.num_lgn:2*self.num_lgn]
+	    sc = K[2*self.num_lgn:3*self.num_lgn]
+	    ss = K[3*self.num_lgn:4*self.num_lgn]
+	    idx = 4*self.num_lgn
+	    
+	    if not __main__.__dict__.get('BalancedLGN',True):
+		    rc = K[idx:idx+self.num_lgn]
+		    rs = K[idx+self.num_lgn:idx+2*self.num_lgn]
+		    idx = idx  + 2*self.num_lgn
+	    
+    	    if __main__.__dict__.get('LGNTreshold',False):
+	    	ln = K[idx:idx + self.num_lgn]
+            	idx += self.num_lgn
+
+	    a = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+	    
+	    idx  = idx+self.num_neurons*self.num_lgn
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+		a1= numpy.reshape(K[idx:idx+self.num_neurons*self.num_neurons],(self.num_neurons,self.num_neurons))
+		idx = idx + self.num_neurons*self.num_neurons 
+	    
+	    n = K[idx:idx+self.num_neurons]
+
+            rfs = numpy.zeros((self.num_neurons,self.image_size))
+	    
+	    xx = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten()	
+	    yy = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten()
+	    			    
+            print 'X'				    
+            print x
+	    print 'Y'
+	    print y
+	    print 'SS'
+	    print ss
+	    print 'SC'
+	    print sc
+	    print 'RS'
+	    print rs
+	    print 'RC'
+	    print rc
+	    print 'A'
+	    print a
+	    print 'N'
+	    print n
+	    
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+		print 'A1'
+		print a1    
+	    
+	    if __main__.__dict__.get('LGNTreshold',False):
+	       print 'LN'	    
+	       print ln
+	    
+	    for j in xrange(self.num_neurons):
+	    	for i in xrange(0,self.num_lgn):
+		    rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(ss[i]*numpy.pi)) 
 	    
 	    return rfs
 	
@@ -235,18 +358,21 @@ class GGEvo(object):
 		
       def perform_gradient_descent(self,chromosome):
 	  inp = numpy.array([v for v in chromosome])
-	  #inp[0:3*self.num_lgn] = numpy.reshape(inp[0:3*self.num_lgn],(self.num_lgn,3)).T.flatten()
-	  #new_K = inp 
-	  #for i in xrange(0,self.num_eval):
-	  #    new_K = new_K - 0.001*self.der(new_K)
-	   
+	  
 	  if self.num_eval != 0:
 	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0)
+		#(new_K,success,c)=fmin_l_bfgs_b(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,m=100)
+		
 	  	for i in xrange(0,len(chromosome)):
 	  		chromosome[i] = new_K[i]
 		score = self.func(numpy.array(new_K))			
 	  else:
-	  	score = self.func(numpy.array(inp))
+		print 'DERIVATION'
+		print self.der(numpy.array(inp))
+		print 'FUNC'
+		print self.func(numpy.array(inp))   
+	  	#score = self.func(numpy.array(inp))
+		score=1
 	  
 	  #K = fmin_bfgs(self.func,numpy.array(inp),fprime=self.der,maxiter=2,full_output=0)
 	  #score = self.func(K)
@@ -278,29 +404,71 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
 	bounds.append((6,(numpy.sqrt(kernel_size)-6)))
 	
     for j in xrange(0,num_lgn):	
-	setOfAlleles.add(GAllele.GAlleleRange(3.0,10,real=True))
-	bounds.append((3,10))
+	setOfAlleles.add(GAllele.GAlleleRange(1.0,25,real=True))
+	bounds.append((1.0,25))
+	setOfAlleles.add(GAllele.GAlleleRange(1.0,25,real=True))
+	bounds.append((1.0,25))
+    if not __main__.__dict__.get('BalancedLGN',True):	
+	for j in xrange(0,num_lgn):	
+		setOfAlleles.add(GAllele.GAlleleRange(0.0,1.0,real=True))
+		bounds.append((0.0,1.0))
+		setOfAlleles.add(GAllele.GAlleleRange(0.0,1.0,real=True))
+		bounds.append((0.0,1.0))
+	
+	
+    if __main__.__dict__.get('LGNTreshold',False):
+       for j in xrange(0,num_lgn):
+           setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
+	   bounds.append((0,20))
+	
+
+    if __main__.__dict__.get('NegativeLgn',True):
+    	minw = -__main__.__dict__.get('MaxW',5000)
+    else:
+    	minw = 0
+    maxw = __main__.__dict__.get('MaxW',5000)
+    print __main__.__dict__.get('MaxW',5000)
     
     for j in xrange(0,num_lgn):		
 	for k in xrange(0,num_neurons_to_estimate):
-	 	setOfAlleles.add(GAllele.GAlleleRange(-2000,2000,real=True))
-		bounds.append((-2000,2000))
+	 	setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+		bounds.append((minw,maxw))
 		
+    if __main__.__dict__.get('SecondLayer',False):
+	for j in xrange(0,num_neurons_to_estimate):		
+		for k in xrange(0,num_neurons_to_estimate):
+	 		setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
+			bounds.append((-2,2))
+			
     for k in xrange(0,num_neurons_to_estimate):
-    	setOfAlleles.add(GAllele.GAlleleRange(-100,100,real=True))
-	bounds.append((-100,100))
+    	setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
+	bounds.append((0,20))
+	if __main__.__dict__.get('SecondLayer',False):
+		setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
+		bounds.append((0,20))	
     
     ggevo = GGEvo(X,Y,num_lgn,num_neurons_to_estimate,bounds)	
     
+    genome_size = num_lgn*4+num_neurons_to_estimate*num_lgn+num_neurons_to_estimate
     
-    genome = G1DList.G1DList(num_lgn*3+num_neurons_to_estimate*num_lgn+num_neurons_to_estimate)
+    if not __main__.__dict__.get('BalancedLGN',True):
+       genome_size += num_lgn*2
+    
+    if __main__.__dict__.get('SecondLayer',False):
+    	genome_size += num_neurons_to_estimate*num_neurons_to_estimate + num_neurons_to_estimate
+    
+    if __main__.__dict__.get('LGNTreshold',False):
+	genome_size += num_lgn
+    
+    genome = G1DList.G1DList(genome_size)
+	    
     genome.setParams(allele=setOfAlleles)
     genome.evaluator.set(ggevo.perform_gradient_descent)
     genome.mutator.set(Mutators.G1DListMutatorAllele)
     genome.initializator.set(Initializators.G1DListInitializatorAllele)
     genome.crossover.set(Crossovers.G1DListCrossoverUniform) 
 
-    ga = GSimpleGA.GSimpleGA(genome,1023)
+    ga = GSimpleGA.GSimpleGA(genome,__main__.__dict__.get('Seed',1023))
     ga.minimax = Consts.minimaxType["minimize"]
     #ga.selector.set(Selectors.GRouletteWheel)
     ga.setElitism(True) 
@@ -309,18 +477,20 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     ga.setMutationRate(__main__.__dict__.get('MutationRate',0.05))
     ga.setCrossoverRate(__main__.__dict__.get('CrossoverRate',0.9))
      
-    #pop = ga.getPopulation()
+    pop = ga.getPopulation()
     #pop.scaleMethod.set(Scaling.SigmaTruncScaling)
 
     ga.evolve(freq_stats=1)
     best = ga.bestIndividual()
     
-    
+    #profmode.print_summary()
     
     #print best
     inp = [v for v in best]
-    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = 1000,messages=0)
+    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = 10000,messages=0)
     #inp[:-1] = numpy.reshape(inp[:-1],(num_lgn,4)).T.flatten()
+    print 'Final likelyhood'
+    print ggevo.func(new_K)
     Ks = new_K
     #rf= ggevo.lscsm.returnRFs(numpy.array([Ks[i,:]]))
 
@@ -345,8 +515,8 @@ def runLSCSM():
     
     normalized_noise_power = [noiseEstimation.signal_and_noise_power(raw_validation_data_set[i])[2] for i in xrange(0,num_neurons)]
     
-    #to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
-    to_delete = [2,3,4,5,6,9,10,11,12,13,14,18,22,26,28,29,30,31,32,34,35,36,37,41,44,50,51,54,55,57,59,60,63,65,67,68,70,71,73,74,76,79,81,82,84,86,87,88,90,91,94,95,97,98,99,100,102]
+    to_delete = []
+    #to_delete = [2,3,4,5,6,9,10,11,12,13,14,18,22,26,28,29,30,31,32,34,35,36,37,41,44,50,51,54,55,57,59,60,63,65,67,68,70,71,73,74,76,79,81,82,84,86,87,88,90,91,94,95,97,98,99,100,102]
     
     training_set = numpy.delete(training_set, to_delete, axis = 1)
     validation_set = numpy.delete(validation_set, to_delete, axis = 1)
@@ -392,6 +562,7 @@ def runLSCSM():
         rfs = glm.returnRFs(K[:num_neurons,:])
  
 
+    
     pylab.figure()
     m = numpy.max(numpy.abs(rfs))
     for i in xrange(0,num_neurons):
@@ -412,43 +583,47 @@ def runLSCSM():
     glm_pred_act = glm.response(training_inputs,K)
     glm_pred_val_act = glm.response(validation_inputs,K)
     
-    ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(rpi_pred_act))
+    ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(rpi_pred_act),display=True)
     rpi_pred_act_t = apply_output_function(numpy.mat(rpi_pred_act),ofs)
     rpi_pred_val_act_t = apply_output_function(numpy.mat(rpi_pred_val_act),ofs)
     
-    ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(glm_pred_act))
+    ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(glm_pred_act),display=True)
     glm_pred_act_t = apply_output_function(numpy.mat(glm_pred_act),ofs)
     glm_pred_val_act_t = apply_output_function(numpy.mat(glm_pred_val_act),ofs)
     
     
     pylab.figure()
-    pylab.title('RPI')
+    
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
     	pylab.plot(rpi_pred_val_act[:,i],validation_set[:,i],'o')
-    pylab.savefig('RPI_val_relationship.png')	
-	
+    pylab.title('RPI')
+    pylab.savefig('RPI_val_relationship.png')	 
+    
+    print 'GLM PRED VAL ACT'
+    print glm_pred_val_act
+    
     pylab.figure()
-    pylab.title('GLM')
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
  	pylab.plot(glm_pred_val_act[:,i],validation_set[:,i],'o')   
+    pylab.title('GLM')
     pylab.savefig('GLM_val_relationship.png')
     
     
     pylab.figure()
-    pylab.title('RPI')
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
     	pylab.plot(rpi_pred_val_act_t[:,i],validation_set[:,i],'o')
+    pylab.title('RPI')
     pylab.savefig('RPI_t_val_relationship.png')	
 	
 	
     pylab.figure()
-    pylab.title('GLM')
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
- 	pylab.plot(glm_pred_val_act_t[:,i],validation_set[:,i],'o')   
+ 	pylab.plot(glm_pred_val_act_t[:,i],validation_set[:,i],'o')
+        pylab.title('RPI')   
     pylab.savefig('GLM_t_val_relationship.png')
     
     
