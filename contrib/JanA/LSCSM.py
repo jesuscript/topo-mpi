@@ -261,15 +261,16 @@ class LSCSM1(object):
 	    print ss
 	    print 'SC'
 	    print sc
-	    print 'RS'
-	    print rs
-	    print 'RC'
-	    print rc
 	    print 'A'
 	    print a
 	    print 'N'
 	    print n
 	    
+	    if not __main__.__dict__.get('BalancedLGN',True):
+		print 'RS'
+		print rs
+	    	print 'RC'
+	    	print rc
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
 		print 'A1'
@@ -286,64 +287,6 @@ class LSCSM1(object):
 	    return rfs
 	
 	
-def fitLSCSM(X,Y,num_lgn,num_neurons_to_estimate):
-    num_pres,num_neurons = numpy.shape(Y)
-    num_pres,kernel_size = numpy.shape(X)
-    
-    Ks = numpy.zeros((num_neurons,num_lgn*5+1))
-    laplace = 0.0001*laplaceBias(numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))
-    
-    rpi = numpy.linalg.pinv(X.T*X + 10*laplace) * X.T * Y
-    
-    
-    for i in xrange(0,num_neurons_to_estimate): 
-	print i
-	k0 = numpy.zeros((num_lgn*5+1,1)).flatten()
-	z = numpy.reshape(k0[:-1],(5,num_lgn))
-	l = numpy.ones(numpy.shape(z))
-	u = numpy.ones(numpy.shape(z))
-	z[0,:] = 2+numpy.random.rand(num_lgn)*(numpy.sqrt(kernel_size)-4)
-	z[1,:] = 2+numpy.random.rand(num_lgn)*(numpy.sqrt(kernel_size)-4)
-	z[2,:] = (numpy.random.rand(num_lgn)-0.5)
-	z[3,:] = 2+numpy.random.rand(num_lgn)*5
-	z[4,:] = 2+numpy.random.rand(num_lgn)*5
-	l[0,:] = l[0,:]*2
-	l[1,:] = l[1,:]*2
-	l[2,:] = l[2,:]*-10
-	l[3,:] = l[3,:]*0
-	l[4,:] = l[4,:]*0
-	u[0,:] = u[0,:]*numpy.sqrt(kernel_size)
-	u[1,:] = u[1,:]*numpy.sqrt(kernel_size)
-	u[2,:] = u[2,:]*8
-	u[3,:] = u[3,:]*8
-	u[4,:] = u[4,:]*8
-	l = l.flatten().tolist() + [-10]
-	u = u.flatten().tolist() + [10]
-	
-	print l
-	print u
-	k0[:-1] = z.flatten()
-	k0=k0.tolist()
-	lscsm = LSCSM(numpy.mat(X),numpy.mat(Y[:,i]),num_lgn)
-	rf = lscsm.returnRFs(numpy.array([k0]))
-	pylab.figure()
-	m = numpy.max(numpy.abs(rf[0,0:kernel_size]))
-	pylab.imshow(numpy.reshape(rf[0],(numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))),vmin=-m,vmax=m,cmap=pylab.cm.RdBu,interpolation='nearest')
-	pylab.colorbar()
-	#K = fmin_ncg(lscsm.func(),numpy.array(k0),lscsm.der(),fhess = lscsm.hess(),avextol=0.00001,maxiter=100)
-	#K = fmin_cg(lscsm.func(),numpy.array(k0),lscsm.der(),avextol=0.00001,maxiter=100)
-	#K = anneal(lscsm.func(), numpy.array(k0), schedule='fast', lower=numpy.array(l),upper=numpy.array(u),full_output=0, maxiter=10000, boltzmann=1.0, learn_rate=0.5, feps=9.9999999999999995e-07)[0]
-	#K = fmin_ncg(lscsm.func(),numpy.array(K),lscsm.der(),fhess = lscsm.hess(),avextol=0.00001,maxiter=100)
-	from pybrain.optimization import CMAES
-
-	l = CMAES(lscsm.func(),numpy.array(k0),maxEvaluations=10000,minimize=True)
-	K = l.learn()
-	
-	print K
-	Ks[i,:] = K[0]
-	
-    return [Ks,rpi,lscsm]
-
 class GGEvo(object):
       def __init__(self,XX,YY,num_lgn,num_neurons,bounds):
 		self.XX = XX
@@ -487,7 +430,7 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     
     #print best
     inp = [v for v in best]
-    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = 10000,messages=0)
+    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = 100000,messages=0)
     #inp[:-1] = numpy.reshape(inp[:-1],(num_lgn,4)).T.flatten()
     print 'Final likelyhood'
     print ggevo.func(new_K)
@@ -499,7 +442,26 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     #pylab.imshow(numpy.reshape(rf[0],(numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))),vmin=-m,vmax=m,cmap=pylab.cm.RdBu,interpolation='nearest')
     #pylab.colorbar()
     #pylab.show()	
-    return [Ks,rpi,ggevo.lscsm]	
+    rfs = ggevo.lscsm.returnRFs(Ks)
+    return [Ks,rpi,ggevo.lscsm,rfs]	
+    
+
+def fitLSCSMEvoSequential(X,Y,num_lgn,num_neurons_to_estimate):
+	
+    Ks = []
+    rpis = []
+    lscsms = []
+    rfs = []	
+    for i in xrange(0,num_neurons_to_estimate):	
+    	[K,rpi,lscsm,rf] =  fitLSCSMEvo(X,Y[:,i],num_lgn,1)
+	Ks.append(K)
+	rpis.append(rpi)
+	lscsms.append(lscsm)
+	rfs.append(rf)
+	
+    return [numpy.vstack(Ks),numpy.hstack(rpis),lscsms,numpy.vstack(rfs)]
+	
+	
     
 def runLSCSM():
     import noiseEstimation
@@ -513,15 +475,13 @@ def runLSCSM():
 
     raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)
     
-    normalized_noise_power = [noiseEstimation.signal_and_noise_power(raw_validation_data_set[i])[2] for i in xrange(0,num_neurons)]
-    
     to_delete = []
     #to_delete = [2,3,4,5,6,9,10,11,12,13,14,18,22,26,28,29,30,31,32,34,35,36,37,41,44,50,51,54,55,57,59,60,63,65,67,68,70,71,73,74,76,79,81,82,84,86,87,88,90,91,94,95,97,98,99,100,102]
     
-    training_set = numpy.delete(training_set, to_delete, axis = 1)
-    validation_set = numpy.delete(validation_set, to_delete, axis = 1)
-    for i in xrange(0,10):
-        raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
+    #training_set = numpy.delete(training_set, to_delete, axis = 1)
+    #validation_set = numpy.delete(validation_set, to_delete, axis = 1)
+    #for i in xrange(0,10):
+    #    raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
     
     # creat history
     history_set = training_set[0:-1,:]
@@ -541,8 +501,6 @@ def runLSCSM():
     db_node1 = db_node
     db_node = db_node.get_child(params)
     
-    
-    
     num_neurons=__main__.__dict__.get('NumNeurons',103)
 
     sx,sy = numpy.shape(training_set)	
@@ -554,13 +512,10 @@ def runLSCSM():
     
     raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)
     
-    if __main__.__dict__.get('Evo',True):
-    	[K,rpi,glm]=  fitLSCSMEvo(numpy.mat(training_inputs),numpy.mat(training_set),params["LGN_NUM"],num_neurons)
-    	rfs = glm.returnRFs(K)
+    if __main__.__dict__.get('Sequential',False):
+    	[K,rpi,glm,rfs]=  fitLSCSMEvoSequential(numpy.mat(training_inputs),numpy.mat(training_set),params["LGN_NUM"],num_neurons)
     else:
-    	[K,rpi,glm]=  fitLSCSM(numpy.mat(training_inputs),numpy.mat(training_set),params["LGN_NUM"],num_neurons)
-        rfs = glm.returnRFs(K[:num_neurons,:])
- 
+        [K,rpi,glm,rfs]=  fitLSCSMEvo(numpy.mat(training_inputs),numpy.mat(training_set),params["LGN_NUM"],num_neurons)
 
     
     pylab.figure()
@@ -580,8 +535,38 @@ def runLSCSM():
     rpi_pred_act = training_inputs * rpi
     rpi_pred_val_act = validation_inputs * rpi
     
-    glm_pred_act = glm.response(training_inputs,K)
-    glm_pred_val_act = glm.response(validation_inputs,K)
+    if __main__.__dict__.get('Sequential',False):
+	glm_pred_act = numpy.hstack([glm[i].response(training_inputs,K[i]) for i in xrange(0,num_neurons)])
+	glm_pred_val_act = numpy.hstack([glm[i].response(validation_inputs,K[i]) for i in xrange(0,num_neurons)])
+    else:
+    	glm_pred_act = glm.response(training_inputs,K)
+    	glm_pred_val_act = glm.response(validation_inputs,K)
+    
+    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
+    
+    signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
+    
+    to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
+    
+    training_set = numpy.delete(training_set, to_delete, axis = 1)
+    validation_set = numpy.delete(validation_set, to_delete, axis = 1)
+    glm_pred_act = numpy.delete(glm_pred_act, to_delete, axis = 1)
+    glm_pred_val_act = numpy.delete(glm_pred_val_act, to_delete, axis = 1)
+    rpi_pred_act = numpy.delete(rpi_pred_act, to_delete, axis = 1)
+    rpi_pred_val_act = numpy.delete(rpi_pred_val_act, to_delete, axis = 1)
+    
+    for i in xrange(0,len(raw_validation_set)):
+    	raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
+    
+    raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)	
+	
+    print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n' 
+    
+    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
+    
+    
+    
+def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set):
     
     ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(rpi_pred_act),display=True)
     rpi_pred_act_t = apply_output_function(numpy.mat(rpi_pred_act),ofs)
@@ -600,8 +585,8 @@ def runLSCSM():
     pylab.title('RPI')
     pylab.savefig('RPI_val_relationship.png')	 
     
-    print 'GLM PRED VAL ACT'
-    print glm_pred_val_act
+    #print 'GLM PRED VAL ACT'
+    #print glm_pred_val_act
     
     pylab.figure()
     for i in xrange(0,num_neurons):
@@ -663,27 +648,34 @@ def runLSCSM():
     (ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act_t)
     print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act_t,2))
 		
-    signal_power,noise_power,normalized_noise_power,training_prediction_power,glm_validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
-    signal_power,noise_power,normalized_noise_power,training_prediction_power_t,validation_prediction_power_t,signal_power_variances = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act_t), numpy.array(glm_pred_val_act_t))
+    glm_signal_power,glm_noise_power,glm_normalized_noise_power,glm_training_prediction_power,glm_validation_prediction_power,glm_signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
+    glm_signal_power_t,glm_noise_power_t,glm_normalized_noise_power_t,glm_training_prediction_power_t,glm_validation_prediction_power_t,glm_signal_power_variances_t = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act_t), numpy.array(glm_pred_val_act_t))
 	
     print "Prediction power on training set / validation set: ", numpy.mean(training_prediction_power) , " / " , numpy.mean(glm_validation_prediction_power)
-    print "Prediction power after TF on training set / validation set: ", numpy.mean(training_prediction_power_t) , " / " , numpy.mean(validation_prediction_power_t)
+    print "Prediction power after TF on training set / validation set: ", numpy.mean(training_prediction_power_t) , " / " , numpy.mean(glm_validation_prediction_power_t)
     
     pylab.figure()
     pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power[:num_neurons],'o')
     pylab.hold(True)
     pylab.plot([0.0,1.0],[0.0,1.0])
-    pylab.xlabel('RPI')
+    pylab.xlabel('RPI_t')
     pylab.ylabel('GLM')
-    pylab.savefig('GLM_vs_RPI_prediction_power.png')
-
+    pylab.savefig('GLM_vs_RPIt_prediction_power.png')
     
-    db_node.add_data("Kernels",K,force=True)
-    db_node.add_data("GLM",glm,force=True)
-    db_node.add_data("ReversCorrelationPredictedActivities",glm_pred_act,force=True)
-    db_node.add_data("ReversCorrelationPredictedActivities+TF",glm_pred_act_t,force=True)
-    db_node.add_data("ReversCorrelationPredictedValidationActivities",glm_pred_val_act,force=True)
-    db_node.add_data("ReversCorrelationPredictedValidationActivities+TF",glm_pred_val_act_t,force=True)
+    pylab.figure()
+    pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power_t[:num_neurons],'o')
+    pylab.hold(True)
+    pylab.plot([0.0,1.0],[0.0,1.0])
+    pylab.xlabel('RPI_t')
+    pylab.ylabel('GLM_t')
+    pylab.savefig('GLMt_vs_RPIt_prediction_power.png')
+
+    #db_node.add_data("Kernels",K,force=True)
+    #db_node.add_data("GLM",glm,force=True)
+    #db_node.add_data("ReversCorrelationPredictedActivities",glm_pred_act,force=True)
+    #db_node.add_data("ReversCorrelationPredictedActivities+TF",glm_pred_act_t,force=True)
+    #db_node.add_data("ReversCorrelationPredictedValidationActivities",glm_pred_val_act,force=True)
+    #db_node.add_data("ReversCorrelationPredictedValidationActivities+TF",glm_pred_val_act_t,force=True)
     #return [K,validation_inputs, validation_set]
 	
 	
