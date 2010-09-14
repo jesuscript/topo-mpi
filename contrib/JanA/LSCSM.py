@@ -12,6 +12,7 @@ from topo.misc.filepath import normalize_path, application_path
 from contrib.modelfit import *
 import contrib.dd
 import contrib.JanA.dataimport
+from contrib.JanA.regression import laplaceBias
 
 #profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
 
@@ -304,6 +305,7 @@ class GGEvo(object):
 	  
 	  if self.num_eval != 0:
 	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0)
+		#(new_K,success,c)=fmin_tnc(self.func,inp[:],approx_grad=True,bounds=self.bounds,maxfun = self.num_eval,messages=0)
 		#(new_K,success,c)=fmin_l_bfgs_b(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,m=100)
 		
 	  	for i in xrange(0,len(chromosome)):
@@ -334,8 +336,6 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     Ks = numpy.ones((num_neurons,num_lgn*4+1))
     
     laplace = laplaceBias(numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))
-    
-    rpi = numpy.linalg.pinv(X.T*X + __main__.__dict__.get('RPILaplaceBias',0.0001)*laplace) * X.T * Y
 	
     setOfAlleles = GAllele.GAlleles()
     bounds = []
@@ -443,6 +443,9 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     #pylab.colorbar()
     #pylab.show()	
     rfs = ggevo.lscsm.returnRFs(Ks)
+    
+    rpi = numpy.linalg.pinv(X.T*X + __main__.__dict__.get('RPILaplaceBias',0.0001)*laplace) * X.T * Y
+    
     return [Ks,rpi,ggevo.lscsm,rfs]	
     
 
@@ -467,6 +470,7 @@ def runLSCSM():
     import noiseEstimation
     
     (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(contrib.dd.DB(None))
+    res = db_node
     raw_validation_set = db_node.data["raw_validation_set"]
     
     num_pres,num_neurons = numpy.shape(training_set)
@@ -496,19 +500,41 @@ def runLSCSM():
     
     print numpy.shape(training_inputs[0])
     
+    
     params={}
+    params["LSCSM"]=True
+    db_node = db_node.get_child(params)
+    
+    params={}
+    params["LaplacaBias"] = __main__.__dict__.get('LaplaceBias',0.0004)
     params["LGN_NUM"] = __main__.__dict__.get('LgnNum',6)
+    params["num_neurons"] = __main__.__dict__.get('NumNeurons',103)
+    params["sequential"] = __main__.__dict__.get('Sequential',False)
+    params["ll"] =  __main__.__dict__.get('LL',True)
+    params["V1OF"] = __main__.__dict__.get('V1OF','Exp')
+    params["LGNOF"] = __main__.__dict__.get('LGNOF','Exp')
+    params["BalancedLGN"] = __main__.__dict__.get('BalancedLGN',True)
+    params["LGNTreshold"] =  __main__.__dict__.get('LGNTreshold',False)
+    params["SecondLayer"] = __main__.__dict__.get('SecondLayer',False)
+    params["LogLossCoef"] = __main__.__dict__.get('LogLossCoef',1.0)
+    params["NegativeLgn"] = __main__.__dict__.get('NegativeLgn',True)
+    params["MaxW"] = __main__.__dict__.get('MaxW',5000)
+    params["GenerationSize"] = __main__.__dict__.get('GenerationSize',100)
+    params["PopulationSize"] = __main__.__dict__.get('PopulationSize',100)
+    params["MutationRate"] = __main__.__dict__.get('MutationRate',0.05)
+    params["CrossoverRate"] = __main__.__dict__.get('CrossoverRate',0.9)
+    params["FromWhichNeuron"] = __main__.__dict__.get('FromWhichNeuron',0)
+    
     db_node1 = db_node
     db_node = db_node.get_child(params)
     
-    num_neurons=__main__.__dict__.get('NumNeurons',103)
+    num_neurons=params["num_neurons"]
 
-    sx,sy = numpy.shape(training_set)	
-    
-    training_set = training_set[:,:num_neurons]
-    validation_set = validation_set[:,:num_neurons]
+    training_set = training_set[:,params["FromWhichNeuron"]:params["FromWhichNeuron"]+num_neurons]
+    validation_set = validation_set[:,params["FromWhichNeuron"]:params["FromWhichNeuron"]+num_neurons]
     for i in xrange(0,len(raw_validation_set)):
-	raw_validation_set[i] = raw_validation_set[i][:,:num_neurons]
+	raw_validation_set[i] = raw_validation_set[i][:,params["FromWhichNeuron"]:params["FromWhichNeuron"]+num_neurons]
+    	
     
     raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)
     
@@ -547,22 +573,30 @@ def runLSCSM():
     signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
     
     to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
+    print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n'
+        
+    if len(to_delete) != num_neurons:
     
-    training_set = numpy.delete(training_set, to_delete, axis = 1)
-    validation_set = numpy.delete(validation_set, to_delete, axis = 1)
-    glm_pred_act = numpy.delete(glm_pred_act, to_delete, axis = 1)
-    glm_pred_val_act = numpy.delete(glm_pred_val_act, to_delete, axis = 1)
-    rpi_pred_act = numpy.delete(rpi_pred_act, to_delete, axis = 1)
-    rpi_pred_val_act = numpy.delete(rpi_pred_val_act, to_delete, axis = 1)
-    
-    for i in xrange(0,len(raw_validation_set)):
-    	raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
-    
-    raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)	
+	training_set = numpy.delete(training_set, to_delete, axis = 1)
+	validation_set = numpy.delete(validation_set, to_delete, axis = 1)
+	glm_pred_act = numpy.delete(glm_pred_act, to_delete, axis = 1)
+	glm_pred_val_act = numpy.delete(glm_pred_val_act, to_delete, axis = 1)
+	rpi_pred_act = numpy.delete(rpi_pred_act, to_delete, axis = 1)
+	rpi_pred_val_act = numpy.delete(rpi_pred_val_act, to_delete, axis = 1)
 	
-    print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n' 
-    
-    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
+	for i in xrange(0,len(raw_validation_set)):
+		raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
+	
+	raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)	
+		
+ 
+	
+	runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
+	
+    db_node.add_data("Kernels",K,force=True)
+    db_node.add_data("LSCSM",glm,force=True)
+	
+    contrib.dd.saveResults(res,normalize_path("res.dat"))
     
     
     
@@ -651,8 +685,8 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     glm_signal_power,glm_noise_power,glm_normalized_noise_power,glm_training_prediction_power,glm_validation_prediction_power,glm_signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
     glm_signal_power_t,glm_noise_power_t,glm_normalized_noise_power_t,glm_training_prediction_power_t,glm_validation_prediction_power_t,glm_signal_power_variances_t = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act_t), numpy.array(glm_pred_val_act_t))
 	
-    print "Prediction power on training set / validation set: ", numpy.mean(training_prediction_power) , " / " , numpy.mean(glm_validation_prediction_power)
-    print "Prediction power after TF on training set / validation set: ", numpy.mean(training_prediction_power_t) , " / " , numpy.mean(glm_validation_prediction_power_t)
+    print "Prediction power on training set / validation set: ", numpy.mean(glm_training_prediction_power) , " / " , numpy.mean(glm_validation_prediction_power)
+    print "Prediction power after TF on training set / validation set: ", numpy.mean(glm_training_prediction_power_t) , " / " , numpy.mean(glm_validation_prediction_power_t)
     
     pylab.figure()
     pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power[:num_neurons],'o')
@@ -678,22 +712,4 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     #db_node.add_data("ReversCorrelationPredictedValidationActivities+TF",glm_pred_val_act_t,force=True)
     #return [K,validation_inputs, validation_set]
 	
-	
-def laplaceBias(sizex,sizey):
-	S = numpy.zeros((sizex*sizey,sizex*sizey))
-	for x in xrange(0,sizex):
-		for y in xrange(0,sizey):
-			norm = numpy.mat(numpy.zeros((sizex,sizey)))
-			norm[x,y]=4
-			if x > 0:
-				norm[x-1,y]=-1
-			if x < sizex-1:
-				norm[x+1,y]=-1   
-			if y > 0:
-				norm[x,y-1]=-1
-			if y < sizey-1:
-				norm[x,y+1]=-1
-			S[x*sizex+y,:] = norm.flatten()
-	S=numpy.mat(S)
-        return S*S.T
 	
