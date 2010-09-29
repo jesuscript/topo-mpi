@@ -9,11 +9,12 @@ theano.config.floatX='float32'
 #theano.config.warn.sum_sum_bug=False
 from theano import tensor as T
 from topo.misc.filepath import normalize_path, application_path
+from contrib.JanA.ofestimation import *
 from contrib.modelfit import *
 import contrib.dd
 import contrib.JanA.dataimport
 from contrib.JanA.regression import laplaceBias
-from contrib.JanA.ofestimation import *
+
 
 #profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
 
@@ -469,9 +470,8 @@ def fitLSCSMEvoSequential(X,Y,num_lgn,num_neurons_to_estimate):
     
 def runLSCSM():
     import noiseEstimation
-    
-    (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(contrib.dd.DB(None))
-    res = db_node
+    res = contrib.dd.DB(None)
+    (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(res)
     raw_validation_set = db_node.data["raw_validation_set"]
     
     num_pres,num_neurons = numpy.shape(training_set)
@@ -597,7 +597,7 @@ def runLSCSM():
     db_node.add_data("Kernels",K,force=True)
     db_node.add_data("LSCSM",glm,force=True)
 	
-    contrib.dd.saveResults(res,normalize_path("res.dat"))
+    contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','res.dat')))
     
     
     
