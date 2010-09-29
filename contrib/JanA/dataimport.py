@@ -11,10 +11,10 @@ def sortOutLoading(db_node):
     params={}	
     params["clump_mag"] = __main__.__dict__.get('ClumpMag',0.1)
     params["normalize_inputs"] = __main__.__dict__.get('NormalizeInputs',False)
-    params["normalize_activities"] = __main__.__dict__.get('NormalizeActivities',True)
+    params["normalize_activities"] = __main__.__dict__.get('NormalizeActivities',False)
     params["cut_out"] = __main__.__dict__.get('CutOut',False)
     params["validation_set_fraction"] = __main__.__dict__.get('ValidationSetFraction',50)		
-    params["density"] = __main__.__dict__.get('density', 20)
+    params["density"] = __main__.__dict__.get('density', 0.15)
     params["spiking"] = __main__.__dict__.get('Spiking', True)
     params['LGN'] =  __main__.__dict__.get('LGN', False)
     if params['LGN']:
@@ -24,7 +24,7 @@ def sortOutLoading(db_node):
     	
     custom_index=None
 	
-    if ap["dataset"] == '2010_04_22':
+    if ap["dataset"] == '2010_03_12':
        dataset_loc = "/home/antolikjan/topographica/topographica/Mice/2010_03_12/Exp_nonfilt_dFoF.txt"	
        num_cells = 47    
        sepparate_validation_set = False
@@ -87,10 +87,10 @@ def sortOutLoading(db_node):
 	  dataset_loc = "Mice/2009_11_04/Raw/region3/spiking_3-7.dat"
 	  val_dataset_loc = "Mice/2009_11_04/Raw/region3/val/spiking_3-7.dat"
        else:
-	  dataset_loc = "Mice/2009_11_04/region3_stationary_180_15fr_103cells_on_response_spikes"	
-          val_dataset_loc = "Mice/2009_11_04/region3_50stim_10reps_15fr_103cells_on_response_spikes"
-	  #dataset_loc = "Mice/2009_11_04/Raw/region3/nospiking_3-7.dat"
-	  #val_dataset_loc = "Mice/2009_11_04/Raw/region3/val/nospiking_3-7.dat"
+	  #dataset_loc = "Mice/2009_11_04/region3_stationary_180_15fr_103cells_on_response_spikes"	
+          #val_dataset_loc = "Mice/2009_11_04/region3_50stim_10reps_15fr_103cells_on_response_spikes"
+	  dataset_loc = "Mice/2009_11_04/Raw/region3/nospiking_3-7.dat"
+	  val_dataset_loc = "Mice/2009_11_04/Raw/region3/val/nospiking_3-7.dat"
        
        #cut_out_x=0.45
        #cut_out_y=0.2
@@ -157,6 +157,23 @@ def sortOutLoading(db_node):
        inputs_directory = "/home/antolikjan/topographica/topographica/Flogl/DataOct2009/20090925_image_list_used/"
        input_match_string = "image_%04d.tif"
 
+    if ap["dataset"] == '20090924':
+       dataset_loc = "Mice/20090924/spiking_3-7.dat"	
+       num_cells = 48    
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       num_stim=1620
+       cut_out_x=0.2
+       cut_out_y=0.0
+       cut_out_size=1.0
+       inputs_offset=1001
+       inputs_directory = "/home/antolikjan/topographica/topographica/Flogl/DataOct2009/20090925_image_list_used/"
+       input_match_string = "image_%04d.tif"
+
 
     if ap["dataset"] == '20091110_19_16_53':
        dataset_loc = "Mice/20091110_19_16_53/(20091110_19_16_53)-_retinotopy_region4_stationary_180_15fr_66cells_on_response_spikes"	
@@ -168,13 +185,19 @@ def sortOutLoading(db_node):
        average_frames_from=0
        average_frames_to=1
        num_stim=1440
+       cut_out_x=0.05
+       cut_out_y=0.0
+       cut_out_size=1.0
        inputs_offset=1001
        inputs_directory = "/home/antolikjan/topographica/topographica/Flogl/DataOct2009/20090925_image_list_used/"
        input_match_string = "image_%04d.tif"
 
     if ap["dataset"] == '2010_04_22':
-       dataset_loc = "Mice/2010_04_22/spiking_3-7.dat"	    
-       val_dataset_loc = "Mice/2010_04_22/val/spiking_3-7.dat"
+       if params["spiking"]:
+	  dataset_loc = "Mice/2010_04_22/spiking_3-7.dat"	    
+       	  val_dataset_loc = "Mice/2010_04_22/val/spiking_3-7.dat"
+       else:
+          print 'ERROR: no no-spiking data'	    
        num_cells = 102    
        sepparate_validation_set = True
        num_rep=1
@@ -281,8 +304,8 @@ def sortOutLoading(db_node):
     	db_node.add_data("raw_validation_set",raw_val_set,force=True)
 	db_node.add_data("flat_validation_inputs",flat_validation_inputs,force=True)
 	db_node.add_data("flat_validation_set",flat_validation_set,force=True)
-    pylab.figure()
-    pylab.plot(training_set,'o')
+    #pylab.figure()
+    #pylab.plot(training_set,'o')
     
     print "Training set size:"
     print numpy.shape(training_set)
@@ -397,8 +420,8 @@ def analyse_reliability(dataset,params):
 	    fano_factors.append(numpy.array(z).var()/numpy.mean(z))
 	c.append(numpy.mean(fano_factors))
     
-    pylab.figure()
-    pylab.hist(c)
+    #pylab.figure()
+    #pylab.hist(c)
     return c
 
 def splitDataset(dataset,ratio):

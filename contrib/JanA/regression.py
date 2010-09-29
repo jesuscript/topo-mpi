@@ -144,8 +144,6 @@ def analyseBlilinearModel():
     compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,validation_inputs,numpy.mat(pred_act),numpy.mat(pred_val_act),raw_validation_set,85)	
 
 
-
-
 def laplaceBias(sizex,sizey):
 	S = numpy.zeros((sizex*sizey,sizex*sizey))
 	for x in xrange(0,sizex):

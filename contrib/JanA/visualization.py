@@ -3,9 +3,10 @@ import contrib.modelfit
 import numpy
 import __main__
 from contrib.modelfit import * 
+from contrib.JanA.ofestimation import *
 
 
-def showRFS(rfs,cog=False,centers=None):
+def showRFS(rfs,cog=False,centers=None,joinnormalize=True):
 	print numpy.shape(rfs)
 	pylab.figure()
 	m = numpy.max([numpy.abs(numpy.min(rfs)),numpy.abs(numpy.max(rfs))])
@@ -13,6 +14,10 @@ def showRFS(rfs,cog=False,centers=None):
 		pylab.subplot(15,15,i+1)
 		w = numpy.array(rfs[i])
 		pylab.show._needmain=False
+		
+		if not joinnormalize:
+		   m = numpy.max([numpy.abs(numpy.min(w)),numpy.abs(numpy.max(w))])
+		
 		pylab.imshow(w,vmin=-m,vmax=m,interpolation='nearest',cmap=pylab.cm.RdBu)
 		if centers != None:
 			cir = Circle( (centers[i][0],centers[i][1]), radius=1,color='r')
@@ -37,7 +42,7 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     rpi_pred_act = training_inputs * rpi
     rpi_pred_val_act = validation_inputs * rpi
 
-    showRFS(numpy.reshape(numpy.array(rpi),(-1,numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))))	
+    showRFS(numpy.reshape(numpy.array(rpi.T),(-1,numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))))	
 
     ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(pred_act),num_bins=10,display=True,name=(modelname+'_piece_wise_nonlinearity.png'))
     pred_act_t = numpy.mat(apply_output_function(numpy.mat(pred_act),ofs))
@@ -77,11 +82,6 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
 	pylab.subplot(11,11,i+1)    
  	pylab.plot(pred_val_act_t[:,i],validation_set[:,i],'o')   
     release_fig('GLM_t_val_relationship.png')
-    
-    print numpy.shape(validation_set - rpi_pred_val_act_t)
-    print numpy.shape(validation_set - pred_val_act)
-    print numpy.shape(numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2)[:,:num_neurons],0))
-    print numpy.shape(numpy.mean(numpy.power(validation_set - pred_val_act,2)[:,:num_neurons],0))
     
     pylab.figure()
     pylab.plot(numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2)[:,:num_neurons],0),numpy.mean(numpy.power(validation_set - pred_val_act,2)[:,:num_neurons],0),'o')
@@ -208,3 +208,59 @@ def extractContour(rf):
 		rf1[x,y]= rf1[x,y] > 0  	 
 	
     	return rf1
+
+def OnOffCenterOfGravityPlot(rfs):
+    a = 1
+    tr = 100 
+    
+    on_center = []
+    off_center = []
+
+    for rf in rfs:
+	rf_on = rf * (rf > tr )   
+	rf_off = -rf * (rf < -tr )
+
+	on_center.append(centre_of_gravity(rf_on))
+	off_center.append(centre_of_gravity(rf_off))
+    
+    f = pylab.figure(dpi=100,facecolor='w',figsize=(3,3))
+    x, y = zip(*on_center)
+    pylab.plot(numpy.array(x),numpy.array(y),'bo')
+    x, y = zip(*off_center)
+    pylab.plot(numpy.array(x),numpy.array(y),'ro')
+    pylab.xlim(0.0,numpy.shape(rfs[0])[0])
+    pylab.ylim(0.0,numpy.shape(rfs[0])[1])
+    pylab.hold('on')
+    
+
+
+
+def visualize2DOF(pred_act1,pred_act2,act):
+    bin_size1 = (numpy.max(pred_act1,axis=0) - numpy.min(pred_act1,axis=0))/6.0 
+    bin_size2 = (numpy.max(pred_act2,axis=0) - numpy.min(pred_act2,axis=0))/6.0
+    	
+    of = numpy.zeros((numpy.shape(act)[1],6,6))
+    ofn = numpy.zeros((numpy.shape(act)[1],6,6))
+	
+    for i in xrange(0,numpy.shape(act)[0]):
+	idx1 = numpy.round_((pred_act1[i,:]-numpy.min(pred_act1,axis=0)) / bin_size1)    	
+	idx2 = numpy.round_((pred_act2[i,:]-numpy.min(pred_act2,axis=0)) / bin_size2)
+	
+	idx1 = idx1 -(idx1 >= 6)
+	idx2 = idx2 -(idx2 >= 6)
+	
+	j=0
+	for (x,y) in zip(numpy.array(idx1).flatten().tolist(),numpy.array(idx2).flatten().tolist()):
+            of[j,x,y] = of[j,x,y] +  act[i,j]
+	    ofn[j,x,y] = ofn[j,x,y] + 1 
+	    j=j+1
+    
+    ofn = ofn + (ofn <= 0)
+    
+    print of[0]
+    print of[1]
+    print ofn[0]
+    print ofn[1]
+    
+    showRFS(of/ofn,joinnormalize=False)
+    	    

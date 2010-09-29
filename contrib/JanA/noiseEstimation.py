@@ -19,9 +19,15 @@ def signal_power_test(raw_validation_data_set, training_set, validation_set, pre
 	pylab.subplot(131)
 	pylab.title('distribution of estimated signal power in neurons')
 	pylab.errorbar(noise_power,signal_power,fmt='ro',yerr=signal_power_variance)
-	pylab.errorbar(numpy.array(noise_power)[significant],numpy.array(signal_power)[significant],fmt='bo',yerr=numpy.array(signal_power_variance)[significant])
+	#pylab.errorbar(numpy.array(noise_power)[significant],numpy.array(signal_power)[significant],fmt='bo',yerr=numpy.array(signal_power_variance)[significant])
 	pylab.ylabel('signal power')
 	pylab.xlabel('noise power')
+	
+	print numpy.shape(numpy.var(training_set,axis=0))
+	print numpy.shape(pred_act)
+	print numpy.shape(training_set)
+	print numpy.shape(signal_power)
+	
 	
 	training_prediction_power=numpy.divide(numpy.var(training_set,axis=0) - numpy.var(pred_act - training_set,axis=0), signal_power)
 	validation_prediction_power=numpy.divide(numpy.var(validation_set,axis=0) - numpy.var(pred_val_act - validation_set,axis=0), signal_power)

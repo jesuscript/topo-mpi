@@ -13,6 +13,7 @@ from contrib.modelfit import *
 import contrib.dd
 import contrib.JanA.dataimport
 from contrib.JanA.regression import laplaceBias
+from contrib.JanA.ofestimation import *
 
 #profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
 
