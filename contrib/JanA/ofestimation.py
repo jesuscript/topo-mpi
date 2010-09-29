@@ -1,5 +1,6 @@
 import numpy
-
+import pylab
+import contrib.modelfit 
 
 def run_nonlinearity_detection(activities,predicted_activities,num_bins=20,display=False ,name='piece_wise_nonlinearity.png'):
             (num_act,num_neurons) = numpy.shape(activities)
@@ -36,7 +37,7 @@ def run_nonlinearity_detection(activities,predicted_activities,num_bins=20,displ
                 os.append((bins,tf))
 	    pylab.rc('font', size=a)
 	    if display:
-		release_fig(name)    
+		contrib.modelfit.release_fig(name)    
             return os
 
 def apply_output_function(activities,of):
@@ -102,7 +103,7 @@ def fit_sigmoids_to_of(activities,predicted_activities,offset=True,display=True,
         	pylab.plot(numpy.array(predicted_activities[:,i].T)[0],fitfunc(best_p,numpy.array(predicted_activities[:,i].T)[0]),'bo')
 		
     if display:
-	release_fig(name)    
+	contrib.modelfit.release_fig(name)    
 		
     pylab.rc('font', size=a)		
 
@@ -220,7 +221,6 @@ def apply2DOF(activities1,activities2,ofs):
 	
 	idx1 = idx1 - (idx1 >= numpy.shape(of)[1])
 	idx2 = idx2 - (idx2 >= numpy.shape(of)[1])
-	
-	new_activities[i,:] = of(zip(idx,idx1,idx2))
+	new_activities[i,:] = [of[i] for i in zip(idx,numpy.array(idx1).flatten().tolist(),numpy.array(idx2).flatten().tolist())]
 	
     return new_activities     	
