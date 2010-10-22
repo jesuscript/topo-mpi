@@ -14,6 +14,7 @@ from contrib.modelfit import *
 import contrib.dd
 import contrib.JanA.dataimport
 from contrib.JanA.regression import laplaceBias
+from pyevolve import *
 
 
 #profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
@@ -67,6 +68,8 @@ class LSCSM(object):
 	       return T.exp(inn)
 	    elif self.of == 'Sigmoid':
 	       return 1.0 / (1 + T.exp(-inn)) 
+    	    elif self.of == 'SoftSign':
+	       return 1+ (inn / (1 + T.abs_(inn))) 
 	    elif self.of == 'Square':
 	       return T.sqr(inn)
 	    elif self.of == 'ExpExp':
@@ -143,18 +146,22 @@ class LSCSM1(object):
 	    	self.ln = self.K[idx:idx + self.num_lgn]
 		idx += self.num_lgn
 	    
-	    self.a = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
 	    
-	    idx +=  num_neurons*self.num_lgn
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	       self.a1 = T.reshape(self.K[idx:idx+num_neurons*num_neurons],(self.num_neurons,self.num_neurons))
-	       idx = idx+num_neurons*num_neurons
+	       self.a = T.reshape(self.K[idx:idx+int(num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn],(self.num_lgn,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))))
+	       idx +=  int(num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn		    
+	       self.a1 = T.reshape(self.K[idx:idx+num_neurons*int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))],(int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)),self.num_neurons))
+	       idx = idx+num_neurons*int(num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))
+	    else:
+	       self.a = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+	       idx +=  num_neurons*self.num_lgn
+
 	    
-	    self.n = self.K[idx:idx+self.num_neurons]
+	    self.n1 = self.K[idx:idx+self.num_neurons]
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	       self.n1 = self.K[idx+self.num_neurons:idx+2*self.num_neurons]
+	       self.n = self.K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
 		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
@@ -162,7 +169,7 @@ class LSCSM1(object):
 	    
 	    else:
 		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
-	        lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
+	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
 	    
 	    #lgn_output = theano.printing.Print(message='lgn output:')(lgn_output)
 	    
@@ -188,7 +195,14 @@ class LSCSM1(object):
 	       self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n1,self.v1of) 
 	    
    	    if __main__.__dict__.get('LL',True):
-	       ll = T.sum(self.model_output) - T.sum(self.Y * T.log(self.model_output))
+	       #self.model_output = theano.printing.Print(message='model output:')(self.model_output)
+	       ll = T.sum(self.model_output) - T.sum(self.Y * T.log(self.model_output+0.0000000000000000001))
+	       
+	       if __main__.__dict__.get('Sparse',False):
+		  ll += __main__.__dict__.get('FLL1',1.0)*T.sum(abs(self.a)) + __main__.__dict__.get('FLL2',1.0)*T.sum(self.a**2) 
+ 		  if __main__.__dict__.get('SecondLayer',False):
+			ll += __main__.__dict__.get('SLL1',1.0)*T.sum(abs(self.a1)) + __main__.__dict__.get('SLL2',1.0)**T.sum(self.a1**2)
+	       
 	    else:
 	       ll = T.sum(T.sqr(self.model_output - self.Y)) 
 
@@ -214,7 +228,9 @@ class LSCSM1(object):
     	    if of == 'Exp':
 	       return T.exp(inn)
 	    elif of == 'Sigmoid':
-	       return 5.0 / (1.0 + T.exp(-inn)) 
+	       return 5.0 / (1.0 + T.exp(-inn))
+    	    elif of == 'SoftSign':
+	       return inn / (1 + T.abs_(inn)) 
 	    elif of == 'Square':
 	       return T.sqr(inn)
 	    elif of == 'ExpExp':
@@ -240,16 +256,20 @@ class LSCSM1(object):
     	    if __main__.__dict__.get('LGNTreshold',False):
 	    	ln = K[idx:idx + self.num_lgn]
             	idx += self.num_lgn
-
-	    a = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
-	    
-	    idx  = idx+self.num_neurons*self.num_lgn
-	    
+		
 	    if __main__.__dict__.get('SecondLayer',False):
-		a1= numpy.reshape(K[idx:idx+self.num_neurons*self.num_neurons],(self.num_neurons,self.num_neurons))
-		idx = idx + self.num_neurons*self.num_neurons 
-	    
+	       a = numpy.reshape(K[idx:idx+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn],(self.num_lgn,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))))
+	       idx +=  int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn		    
+	       a1 = numpy.reshape(K[idx:idx+self.num_neurons*int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))],(int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)),self.num_neurons))
+	       idx = idx+self.num_neurons*int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))
+	    else:
+	       a = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+	       idx +=  self.num_neurons*self.num_lgn
+	
 	    n = K[idx:idx+self.num_neurons]
+
+	    if __main__.__dict__.get('SecondLayer',False):
+	       n1 = K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
 
             rfs = numpy.zeros((self.num_neurons,self.image_size))
 	    
@@ -277,18 +297,56 @@ class LSCSM1(object):
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
 		print 'A1'
-		print a1    
+		print a1
+		pylab.figure()    
+		pylab.imshow(a1)
 	    
 	    if __main__.__dict__.get('LGNTreshold',False):
 	       print 'LN'	    
 	       print ln
 	    
-	    for j in xrange(self.num_neurons):
+	    if __main__.__dict__.get('SecondLayer',False):
+	    	num_neurons_first_layer = int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))  
+	    else:
+		num_neurons_first_layer = self.num_neurons
+		
+	    for j in xrange(num_neurons_first_layer):
 	    	for i in xrange(0,self.num_lgn):
-		    rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(ss[i]*numpy.pi)) 
-	    
+		    if  __main__.__dict__.get('BalancedLGN',True):			
+		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi))) 
+		    else:
+			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi)))
+			
+	        
 	    return rfs
-	
+
+bounds = []
+
+class BoundsSafeFunction(object):	
+      def __init__(self,function,bounds):
+	  self.fun = function
+	  self.mins = zip(bounds)[0]	
+	  self.maxs = zip(bounds)[1]
+      	
+      def fun(inp):
+	  print 'C'
+	  print inp
+	  above_bounds = inp > maxs
+	  below_bounds = inp < mins
+	  	
+	  if numpy.sum(above_bounds)+numpy.sum(above_bounds):
+		inp[numpy.nonzero(above_bounds)] = maxs[numpy.nonzero(above_bounds)]
+		inp[numpy.nonzero(below_bounds)] = mins[numpy.nonzero(below_bounds)]
+		
+		z = self.fun(inp)
+		z = z+numpy.sqrt(numpy.power(inp[numpy.nonzero(above_bounds)]-maxs[numpy.nonzero(above_bounds)],2) +numpy.power(inp[numpy.nonzero(below_bounds)]-maxs[numpy.nonzero(below_bounds)],2))
+		print z 
+		return z
+          else:
+                z = self.fun(inn)
+		print z
+       		return z 	
+      	
 	
 class GGEvo(object):
       def __init__(self,XX,YY,num_lgn,num_neurons,bounds):
@@ -327,11 +385,69 @@ class GGEvo(object):
 	  #print z
 	  #(K,score,t1,t2,t3,t4,t5,t6) = fmin_ncg(self.func,numpy.array(inp),self.der,fhess = self.hess,avextol=0.00001,maxiter=2,full_output=1)
 	  return score
+
+
+      	
+	
+def objF(inp):
+	  a = numpy.array(zip(contrib.JanA.LSCSM.bounds))
+	  mins = a[:,0,0]
+	  maxs = a[:,0,1]
+	  above_bounds = numpy.array(inp) > numpy.array(maxs)
+	  below_bounds = numpy.array(inp) < numpy.array(mins)
+
+	  if numpy.sum(above_bounds)+numpy.sum(below_bounds):
+		inp[numpy.nonzero(above_bounds)] = maxs[numpy.nonzero(above_bounds)]
+		inp[numpy.nonzero(below_bounds)] = mins[numpy.nonzero(below_bounds)]
+		z = contrib.JanA.LSCSM.fun(inp)
+		z = z+1000000*numpy.sqrt(numpy.sum(numpy.power(inp[numpy.nonzero(above_bounds)]-maxs[numpy.nonzero(above_bounds)],2)
+		) +1000000*numpy.sum(numpy.power(inp[numpy.nonzero(below_bounds)]-maxs[numpy.nonzero(below_bounds)],2)))
+		return z
+	  
+          else:
+                z = contrib.JanA.LSCSM.fun(inp)
+       		return z 	
+
+	  
+	  
+class GGEvoPyBrain(object):
+      def __init__(self,XX,YY,num_lgn,num_neurons,bounds):
+		self.XX = XX
+		self.YY = YY
+		self.num_lgn = num_lgn
+		self.num_neurons = num_neurons
+		self.lscsm = LSCSM1(numpy.mat(XX),numpy.mat(YY),num_lgn,num_neurons)
+		self.func = self.lscsm.func() 
+		self.der = self.lscsm.der()
+		self.num_eval = __main__.__dict__.get('NumEval',10)
+		self.bounds = bounds
+		a = numpy.array(zip(bounds))
+		self.mins = a[:,0,0]
+	        self.maxs = a[:,0,1]
+		contrib.JanA.LSCSM.fun = self.func
+		contrib.JanA.LSCSM.bounds = self.bounds
+
+      def perform_gradient_descent(self,chromosome):
+	  from pybrain.optimization import ExactNES, OriginalNES
+	  inp = numpy.array([v for v in chromosome])
+	  
+	  if self.num_eval != 0:
+		#bf = BoundsSafeFunction(self.func,self.bounds)
+		l = ExactNES(objF, inp[:],rangemins=self.mins,rangemaxs=self.maxs,learningRate=0.01,initCovariances=numpy.eye(len(bounds))*0.1)
+		l.minimize = True
+		l.maxEvaluations = self.num_eval
+		#l.rangemins = self.mins
+		#l.rangemaxs = self.maxs
+		(new_K,success) = l.learn()
+	  	for i in xrange(0,len(chromosome)):
+	  		chromosome[i] = new_K[i]
+		score = objF(numpy.array(new_K))			
+	  return score
+	  
 	  
 	
 
 def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
-    from pyevolve import *
     num_pres,num_neurons = numpy.shape(Y)
     num_pres,kernel_size = numpy.shape(X)
     
@@ -374,36 +490,55 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     maxw = __main__.__dict__.get('MaxW',5000)
     print __main__.__dict__.get('MaxW',5000)
     
-    for j in xrange(0,num_lgn):		
-	for k in xrange(0,num_neurons_to_estimate):
-	 	setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
-		bounds.append((minw,maxw))
-		
+    
+    
     if __main__.__dict__.get('SecondLayer',False):
-	for j in xrange(0,num_neurons_to_estimate):		
+    	for j in xrange(0,num_lgn):		
+		for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+	 		setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+			bounds.append((minw,maxw))
+		
+       	for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
 		for k in xrange(0,num_neurons_to_estimate):
 	 		setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
-			bounds.append((-2,2))
+    			bounds.append((-2,2))
+    else:
+    	for j in xrange(0,num_lgn):		
+		for k in xrange(0,num_neurons_to_estimate):
+	 		setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+			bounds.append((minw,maxw))
+			
+		
 			
     for k in xrange(0,num_neurons_to_estimate):
     	setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
 	bounds.append((0,20))
-	if __main__.__dict__.get('SecondLayer',False):
-		setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
-		bounds.append((0,20))	
+	
+    if __main__.__dict__.get('SecondLayer',False):
+	for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+    		setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
+		bounds.append((0,20))
     
-    ggevo = GGEvo(X,Y,num_lgn,num_neurons_to_estimate,bounds)	
+    if __main__.__dict__.get('PyBrain',False):
+    	ggevo = GGEvoPyBrain(X,Y,num_lgn,num_neurons_to_estimate,bounds)
+    else:	
+        ggevo = GGEvo(X,Y,num_lgn,num_neurons_to_estimate,bounds)
+	
     
-    genome_size = num_lgn*4+num_neurons_to_estimate*num_lgn+num_neurons_to_estimate
+    if __main__.__dict__.get('SecondLayer',False):
+        genome_size = num_lgn*4+int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))*num_lgn+num_neurons_to_estimate
+    	genome_size += num_neurons_to_estimate*int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0)) + int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))
+    else:
+        genome_size = num_lgn*4+num_neurons_to_estimate*num_lgn+num_neurons_to_estimate
     
     if not __main__.__dict__.get('BalancedLGN',True):
        genome_size += num_lgn*2
     
-    if __main__.__dict__.get('SecondLayer',False):
-    	genome_size += num_neurons_to_estimate*num_neurons_to_estimate + num_neurons_to_estimate
-    
     if __main__.__dict__.get('LGNTreshold',False):
 	genome_size += num_lgn
+    
+    print genome_size
+    print len(bounds)
     
     genome = G1DList.G1DList(genome_size)
 	    
@@ -432,7 +567,7 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     
     #print best
     inp = [v for v in best]
-    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = 100000,messages=0)
+    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = __main__.__dict__.get('FinalNumEval',10000),messages=0)
     #inp[:-1] = numpy.reshape(inp[:-1],(num_lgn,4)).T.flatten()
     print 'Final likelyhood'
     print ggevo.func(new_K)
@@ -517,6 +652,7 @@ def runLSCSM():
     params["BalancedLGN"] = __main__.__dict__.get('BalancedLGN',True)
     params["LGNTreshold"] =  __main__.__dict__.get('LGNTreshold',False)
     params["SecondLayer"] = __main__.__dict__.get('SecondLayer',False)
+    params["HiddenLayerSize"] = __main__.__dict__.get('HiddenLayerSize',1.0)
     params["LogLossCoef"] = __main__.__dict__.get('LogLossCoef',1.0)
     params["NegativeLgn"] = __main__.__dict__.get('NegativeLgn',True)
     params["MaxW"] = __main__.__dict__.get('MaxW',5000)
@@ -599,7 +735,38 @@ def runLSCSM():
 	
     contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','res.dat')))
     
+
+def loadLSCSMandAnalyse(): 
     
+    res = contrib.dd.DB(None)
+    (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(res)
+    raw_validation_set = db_node.data["raw_validation_set"]
+    
+    res = contrib.dd.loadResults("LSCSMbasic.dat")
+    
+    dataset_node = res.children[0].children[0]
+    
+    training_set = dataset_node.data["training_set"]
+    validation_set = dataset_node.data["validation_set"]
+    training_inputs= dataset_node.data["training_inputs"]
+    validation_inputs= dataset_node.data["validation_inputs"]
+    
+    lscsm_new = contrib.JanA.LSCSM.LSCSM1(numpy.mat(training_inputs),numpy.mat(training_set),8,103)
+    
+    
+    K = res.children[0].children[0].children[0].children[0].data["Kernels"]
+    lscsm = res.children[0].children[0].children[0].children[0].data["LSCSM"]
+    rfs  = lscsm_new.returnRFs(K)
+    	
+    pred_act = lscsm.response(training_inputs,K)
+    pred_val_act = lscsm.response(validation_inputs,K)
+   
+    sizex=numpy.sqrt(numpy.shape(training_inputs)[1])
+    from contrib.JanA.visualization import compareModelPerformanceWithRPI  
+    
+    compareModelPerformanceWithRPI(numpy.mat(training_set),numpy.mat(validation_set),numpy.mat(training_inputs),numpy.mat(validation_inputs),numpy.mat(pred_act),numpy.mat(pred_val_act),numpy.array(raw_validation_set),sizex,sizex,modelname='Model')
+   	
+	
     
 def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set):
     
