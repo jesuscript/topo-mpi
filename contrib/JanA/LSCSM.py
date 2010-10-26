@@ -158,10 +158,10 @@ class LSCSM1(object):
 	       idx +=  num_neurons*self.num_lgn
 
 	    
-	    self.n1 = self.K[idx:idx+self.num_neurons]
+	    self.n = self.K[idx:idx+self.num_neurons]
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	       self.n = self.K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
+	       self.n1 = self.K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
 		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
@@ -187,12 +187,13 @@ class LSCSM1(object):
 	    
 	    #self.output = theano.printing.Print(message='Output2:')(self.output)
 	    
-	    self.model_output = self.construct_of(self.output-self.n,self.v1of)
-	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       self.model_output = self.construct_of(self.output-self.n1,self.v1of)
+	       self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n,self.v1of)
+	    else:
+	       self.model_output = self.construct_of(self.output-self.n,self.v1of)	    
 	    #self.model_output = theano.printing.Print(message='model output:')(self.model_output)
 	    
-	    if __main__.__dict__.get('SecondLayer',False):
-	       self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n1,self.v1of) 
 	    
    	    if __main__.__dict__.get('LL',True):
 	       #self.model_output = theano.printing.Print(message='model output:')(self.model_output)
@@ -364,7 +365,7 @@ class GGEvo(object):
 	  inp = numpy.array([v for v in chromosome])
 	  
 	  if self.num_eval != 0:
-	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0)
+	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0,maxCGit=5)
 		#(new_K,success,c)=fmin_tnc(self.func,inp[:],approx_grad=True,bounds=self.bounds,maxfun = self.num_eval,messages=0)
 		#(new_K,success,c)=fmin_l_bfgs_b(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,m=100)
 		
