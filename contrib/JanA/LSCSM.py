@@ -15,6 +15,7 @@ import contrib.dd
 import contrib.JanA.dataimport
 from contrib.JanA.regression import laplaceBias
 from pyevolve import *
+from contrib.JanA.visualization import printCorrelationAnalysis
 
 
 #profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
@@ -111,6 +112,8 @@ class LSCSM1(object):
 	    self.num_lgn = num_lgn
 	    self.num_neurons = num_neurons
 	    self.size = numpy.sqrt(self.image_size)
+	    self.hls = __main__.__dict__.get('HiddenLayerSize',1.0)
+	    self.divisive = __main__.__dict__.get('Divisive',False)	    
 
 	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten())	
 	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten())
@@ -149,19 +152,36 @@ class LSCSM1(object):
 	    
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	       self.a = T.reshape(self.K[idx:idx+int(num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn],(self.num_lgn,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))))
-	       idx +=  int(num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn		    
-	       self.a1 = T.reshape(self.K[idx:idx+num_neurons*int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))],(int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)),self.num_neurons))
-	       idx = idx+num_neurons*int(num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))
+	       self.a = T.reshape(self.K[idx:idx+int(num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+	       idx +=  int(num_neurons*self.hls)*self.num_lgn		    
+	       self.a1 = T.reshape(self.K[idx:idx+num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       idx = idx+num_neurons*int(num_neurons*self.hls)
+	       if self.divisive:
+		       self.d = T.reshape(self.K[idx:idx+int(num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+		       idx +=  int(num_neurons*self.hls)*self.num_lgn		    
+	       	       self.d1 = T.reshape(self.K[idx:idx+num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       	       idx = idx+num_neurons*int(num_neurons*self.hls)
 	    else:
 	       self.a = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
 	       idx +=  num_neurons*self.num_lgn
+	       if self.divisive:	       
+	               self.d = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+		       idx +=  num_neurons*self.num_lgn
 
 	    
 	    self.n = self.K[idx:idx+self.num_neurons]
+	    idx +=  num_neurons
+	    
+	    if self.divisive:
+		    self.nd = self.K[idx:idx+self.num_neurons]
+		    idx +=  num_neurons
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	       self.n1 = self.K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
+	       self.n1 = self.K[idx:idx+int(self.num_neurons*self.hls)]
+	       idx +=  int(self.num_neurons*self.hls)
+	       if self.divisive:
+		       self.nd1 = self.K[idx:idx+int(self.num_neurons*self.hls)]
+		       idx +=  int(self.num_neurons*self.hls)
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
 		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
@@ -177,10 +197,9 @@ class LSCSM1(object):
 	    
 	    if __main__.__dict__.get('LGNTreshold',False):
 	       lgn_output = lgn_output - self.ln.T
- 
+            lgn_output = self.construct_of(lgn_output,self.lgnof)
 	       
-	    self.output = T.dot(self.construct_of(lgn_output,self.lgnof),self.a)
-	    
+	    self.output = T.dot(lgn_output,self.a)
 	    #self.output = theano.printing.Print(message='Output1:')(self.output)
 	    
 	    #self.n = theano.printing.Print(message='N:')(self.n)
@@ -188,11 +207,17 @@ class LSCSM1(object):
 	    #self.output = theano.printing.Print(message='Output2:')(self.output)
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	       self.model_output = self.construct_of(self.output-self.n1,self.v1of)
-	       self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n,self.v1of)
+	       if self.divisive:
+	       		self.model_output = self.construct_of((self.output-self.n1)/(1.0+T.dot(lgn_output,self.d)-self.nd1),self.v1of)
+	       		self.model_output = self.construct_of( (T.dot(self.model_output , self.a1) - self.n)/(1.0+T.dot(self.model_output , self.d1) - self.nd),self.v1of)
+	       else:
+		        self.model_output = self.construct_of(self.output-self.n1,self.v1of)
+	       		self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n,self.v1of)
 	    else:
-	       self.model_output = self.construct_of(self.output-self.n,self.v1of)	    
-	    #self.model_output = theano.printing.Print(message='model output:')(self.model_output)
+	       if self.divisive:
+                  self.model_output = self.construct_of((self.output-self.n)/(1.0+T.dot(lgn_output,self.d)-self.nd),self.v1of)
+	       else:
+		  self.model_output = self.construct_of(self.output-self.n,self.v1of)
 	    
 	    
    	    if __main__.__dict__.get('LL',True):
@@ -259,21 +284,29 @@ class LSCSM1(object):
             	idx += self.num_lgn
 		
 	    if __main__.__dict__.get('SecondLayer',False):
-	       a = numpy.reshape(K[idx:idx+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn],(self.num_lgn,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))))
-	       idx +=  int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))*self.num_lgn		    
-	       a1 = numpy.reshape(K[idx:idx+self.num_neurons*int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))],(int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)),self.num_neurons))
-	       idx = idx+self.num_neurons*int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))
+	       a = numpy.reshape(K[idx:idx+int(self.num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+	       idx +=  int(self.num_neurons*self.hls)*self.num_lgn		    
+	       a1 = numpy.reshape(K[idx:idx+self.num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       idx = idx+self.num_neurons*int(self.num_neurons*self.hls)
+	       if self.divisive:
+		       d = numpy.reshape(K[idx:idx+int(self.num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+		       idx +=  int(self.num_neurons*self.hls)*self.num_lgn		    
+	       	       d1 = numpy.reshape(K[idx:idx+self.num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       	       idx = idx+self.num_neurons*int(self.num_neurons*self.hls)
+
 	    else:
 	       a = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
 	       idx +=  self.num_neurons*self.num_lgn
+       	       if self.divisive:	       
+	               d = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+		       idx +=  self.num_neurons*self.num_lgn
+
 	
 	    n = K[idx:idx+self.num_neurons]
 
 	    if __main__.__dict__.get('SecondLayer',False):
-	       n1 = K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
+	       n1 = K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*self.hls)]
 
-            rfs = numpy.zeros((self.num_neurons,self.image_size))
-	    
 	    xx = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten()	
 	    yy = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten()
 	    			    
@@ -299,6 +332,7 @@ class LSCSM1(object):
 	    if __main__.__dict__.get('SecondLayer',False):
 		print 'A1'
 		print a1
+		print self.hls
 		pylab.figure()    
 		pylab.imshow(a1)
 	    
@@ -307,10 +341,12 @@ class LSCSM1(object):
 	       print ln
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
-	    	num_neurons_first_layer = int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))  
+	    	num_neurons_first_layer = int(self.num_neurons*self.hls)  
 	    else:
 		num_neurons_first_layer = self.num_neurons
-		
+            
+	    rfs = numpy.zeros((num_neurons_first_layer,self.image_size))		
+	    
 	    for j in xrange(num_neurons_first_layer):
 	    	for i in xrange(0,self.num_lgn):
 		    if  __main__.__dict__.get('BalancedLGN',True):			
@@ -318,7 +354,6 @@ class LSCSM1(object):
 		    else:
 			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi)))
 			
-	        
 	    return rfs
 
 bounds = []
@@ -365,8 +400,7 @@ class GGEvo(object):
 	  inp = numpy.array([v for v in chromosome])
 	  
 	  if self.num_eval != 0:
-	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0,maxCGit=5)
-		#(new_K,success,c)=fmin_tnc(self.func,inp[:],approx_grad=True,bounds=self.bounds,maxfun = self.num_eval,messages=0)
+	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0)
 		#(new_K,success,c)=fmin_l_bfgs_b(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,m=100)
 		
 	  	for i in xrange(0,len(chromosome)):
@@ -491,46 +525,55 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     maxw = __main__.__dict__.get('MaxW',5000)
     print __main__.__dict__.get('MaxW',5000)
     
-    
+    if __main__.__dict__.get('Divisive',False):
+    	d=2
+    else:
+	d=1
+
     
     if __main__.__dict__.get('SecondLayer',False):
-    	for j in xrange(0,num_lgn):		
-		for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
-	 		setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
-			bounds.append((minw,maxw))
-		
-       	for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
-		for k in xrange(0,num_neurons_to_estimate):
-	 		setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
-    			bounds.append((-2,2))
+	for i in xrange(0,d):    
+		for j in xrange(0,num_lgn):		
+			for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+				setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+				bounds.append((minw,maxw))
+			
+		for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
+			for k in xrange(0,num_neurons_to_estimate):
+				setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
+				bounds.append((-2,2))
     else:
-    	for j in xrange(0,num_lgn):		
-		for k in xrange(0,num_neurons_to_estimate):
-	 		setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
-			bounds.append((minw,maxw))
+	for i in xrange(0,d):    
+		for j in xrange(0,num_lgn):		
+			for k in xrange(0,num_neurons_to_estimate):
+				setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+				bounds.append((minw,maxw))
 			
 		
 			
     for k in xrange(0,num_neurons_to_estimate):
-    	setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
-	bounds.append((0,20))
-	
-    if __main__.__dict__.get('SecondLayer',False):
-	for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+	for i in xrange(0,d):
     		setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
 		bounds.append((0,20))
+	
+    if __main__.__dict__.get('SecondLayer',False):
+	for i in xrange(0,d):
+		for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+			setOfAlleles.add(GAllele.GAlleleRange(0,20,real=True))
+			bounds.append((0,20))
     
     if __main__.__dict__.get('PyBrain',False):
     	ggevo = GGEvoPyBrain(X,Y,num_lgn,num_neurons_to_estimate,bounds)
     else:	
         ggevo = GGEvo(X,Y,num_lgn,num_neurons_to_estimate,bounds)
 	
+    genome_size = num_lgn*4
     
     if __main__.__dict__.get('SecondLayer',False):
-        genome_size = num_lgn*4+int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))*num_lgn+num_neurons_to_estimate
-    	genome_size += num_neurons_to_estimate*int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0)) + int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))
+        genome_size += int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))*num_lgn*d+num_neurons_to_estimate*d
+    	genome_size += num_neurons_to_estimate*int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))*d + int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))*d
     else:
-        genome_size = num_lgn*4+num_neurons_to_estimate*num_lgn+num_neurons_to_estimate
+        genome_size += num_neurons_to_estimate*num_lgn*d+num_neurons_to_estimate*d
     
     if not __main__.__dict__.get('BalancedLGN',True):
        genome_size += num_lgn*2
@@ -684,7 +727,7 @@ def runLSCSM():
     
     pylab.figure()
     m = numpy.max(numpy.abs(rfs))
-    for i in xrange(0,num_neurons):
+    for i in xrange(0,num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)):
 	pylab.subplot(11,11,i+1)    
     	pylab.imshow(numpy.reshape(rfs[i,0:kernel_size],(size,size)),vmin=-m,vmax=m,cmap=pylab.cm.RdBu,interpolation='nearest')
     pylab.savefig('GLM_rfs.png')	
@@ -836,13 +879,18 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     (ranks,correct,pred) = performIdentification(validation_set,rpi_pred_val_act_t)
     print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2))
 		
-    signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act), numpy.array(rpi_pred_val_act))
-    signal_power,noise_power,normalized_noise_power,training_prediction_power_t,rpi_validation_prediction_power_t,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act_t), numpy.array(rpi_pred_val_act_t))
-	
-    print "Prediction power on training set / validation set: ", numpy.mean(training_prediction_power) , " / " , numpy.mean(validation_prediction_power)
-    print "Prediction power after TF on training set / validation set: ", numpy.mean(training_prediction_power_t) , " / " , numpy.mean(rpi_validation_prediction_power_t)
+    if len(raw_validation_data_set) != 1:
+	signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act), numpy.array(rpi_pred_val_act))
+	signal_power,noise_power,normalized_noise_power,training_prediction_power_t,rpi_validation_prediction_power_t,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act_t), numpy.array(rpi_pred_val_act_t))
+		
+	print "Prediction power on training set / validation set: ", numpy.mean(training_prediction_power) , " / " , numpy.mean(validation_prediction_power)
+	print "Prediction power after TF on training set / validation set: ", numpy.mean(training_prediction_power_t) , " / " , numpy.mean(rpi_validation_prediction_power_t)
 
-	
+    print 'WithoutTF'
+    printCorrelationAnalysis(training_set,validation_set,rpi_pred_act,rpi_pred_val_act)
+    print 'WithTF'
+    printCorrelationAnalysis(training_set,validation_set,rpi_pred_act_t,rpi_pred_val_act_t)
+
     print '\n \n GLM \n'
 	
     (ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act)
@@ -850,28 +898,36 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
 	
     (ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act_t)
     print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act_t,2))
+    
+    if len(raw_validation_data_set) != 1:		
+	glm_signal_power,glm_noise_power,glm_normalized_noise_power,glm_training_prediction_power,glm_validation_prediction_power,glm_signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
+	glm_signal_power_t,glm_noise_power_t,glm_normalized_noise_power_t,glm_training_prediction_power_t,glm_validation_prediction_power_t,glm_signal_power_variances_t = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act_t), numpy.array(glm_pred_val_act_t))
 		
-    glm_signal_power,glm_noise_power,glm_normalized_noise_power,glm_training_prediction_power,glm_validation_prediction_power,glm_signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
-    glm_signal_power_t,glm_noise_power_t,glm_normalized_noise_power_t,glm_training_prediction_power_t,glm_validation_prediction_power_t,glm_signal_power_variances_t = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act_t), numpy.array(glm_pred_val_act_t))
+	print "Prediction power on training set / validation set: ", numpy.mean(glm_training_prediction_power) , " / " , numpy.mean(glm_validation_prediction_power)
+	print "Prediction power after TF on training set / validation set: ", numpy.mean(glm_training_prediction_power_t) , " / " , numpy.mean(glm_validation_prediction_power_t)
 	
-    print "Prediction power on training set / validation set: ", numpy.mean(glm_training_prediction_power) , " / " , numpy.mean(glm_validation_prediction_power)
-    print "Prediction power after TF on training set / validation set: ", numpy.mean(glm_training_prediction_power_t) , " / " , numpy.mean(glm_validation_prediction_power_t)
+    print 'WithoutTF'
+    printCorrelationAnalysis(training_set,validation_set,glm_pred_act,glm_pred_val_act)
+    print 'WithTF'
+    printCorrelationAnalysis(training_set,validation_set,glm_pred_act_t,glm_pred_val_act_t)
+
     
-    pylab.figure()
-    pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power[:num_neurons],'o')
-    pylab.hold(True)
-    pylab.plot([0.0,1.0],[0.0,1.0])
-    pylab.xlabel('RPI_t')
-    pylab.ylabel('GLM')
-    pylab.savefig('GLM_vs_RPIt_prediction_power.png')
-    
-    pylab.figure()
-    pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power_t[:num_neurons],'o')
-    pylab.hold(True)
-    pylab.plot([0.0,1.0],[0.0,1.0])
-    pylab.xlabel('RPI_t')
-    pylab.ylabel('GLM_t')
-    pylab.savefig('GLMt_vs_RPIt_prediction_power.png')
+    if len(raw_validation_data_set) != 1:
+	pylab.figure()
+	pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power[:num_neurons],'o')
+	pylab.hold(True)
+	pylab.plot([0.0,1.0],[0.0,1.0])
+	pylab.xlabel('RPI_t')
+	pylab.ylabel('GLM')
+	pylab.savefig('GLM_vs_RPIt_prediction_power.png')
+	
+	pylab.figure()
+	pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power_t[:num_neurons],'o')
+	pylab.hold(True)
+	pylab.plot([0.0,1.0],[0.0,1.0])
+	pylab.xlabel('RPI_t')
+	pylab.ylabel('GLM_t')
+	pylab.savefig('GLMt_vs_RPIt_prediction_power.png')
 
     #db_node.add_data("Kernels",K,force=True)
     #db_node.add_data("GLM",glm,force=True)
