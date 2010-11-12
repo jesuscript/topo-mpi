@@ -751,31 +751,35 @@ def runLSCSM():
     
     runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
     
-    signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
+    to_delete=[]
     
-    to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
-    print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n'
-        
-    if len(to_delete) != num_neurons:
+    if len(raw_validation_data_set) != 1:
     
-	training_set = numpy.delete(training_set, to_delete, axis = 1)
-	validation_set = numpy.delete(validation_set, to_delete, axis = 1)
-	glm_pred_act = numpy.delete(glm_pred_act, to_delete, axis = 1)
-	glm_pred_val_act = numpy.delete(glm_pred_val_act, to_delete, axis = 1)
-	rpi_pred_act = numpy.delete(rpi_pred_act, to_delete, axis = 1)
-	rpi_pred_val_act = numpy.delete(rpi_pred_val_act, to_delete, axis = 1)
+	signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
 	
-	for i in xrange(0,len(raw_validation_set)):
-		raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
-	
-	raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)	
+	to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
+	print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n'
 		
- 
+	if len(to_delete) != num_neurons:
 	
-	runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
+		training_set = numpy.delete(training_set, to_delete, axis = 1)
+		validation_set = numpy.delete(validation_set, to_delete, axis = 1)
+		glm_pred_act = numpy.delete(glm_pred_act, to_delete, axis = 1)
+		glm_pred_val_act = numpy.delete(glm_pred_val_act, to_delete, axis = 1)
+		rpi_pred_act = numpy.delete(rpi_pred_act, to_delete, axis = 1)
+		rpi_pred_val_act = numpy.delete(rpi_pred_val_act, to_delete, axis = 1)
+		
+		for i in xrange(0,len(raw_validation_set)):
+			raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
+		
+		raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)	
+			
 	
-    db_node.add_data("Kernels",K,force=True)
-    db_node.add_data("LSCSM",glm,force=True)
+		
+		runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
+		
+	db_node.add_data("Kernels",K,force=True)
+	db_node.add_data("LSCSM",glm,force=True)
 	
     contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','res.dat')))
     
