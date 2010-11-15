@@ -208,7 +208,9 @@ class LSCSM1(object):
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
 	       if self.divisive:
-	       		self.model_output = self.construct_of((self.output-self.n1)/(1.0+T.dot(lgn_output,self.d)-self.nd1),self.v1of)
+	       		#self.model_output = self.construct_of((self.output-self.n1)/(1.0+T.dot(lgn_output,self.d)-self.nd1),self.v1of)
+			
+			self.model_output = self.construct_of(self.output-self.n1,self.v1of)
 	       		self.model_output = self.construct_of( (T.dot(self.model_output , self.a1) - self.n)/(1.0+T.dot(self.model_output , self.d1) - self.nd),self.v1of)
 	       else:
 		        self.model_output = self.construct_of(self.output-self.n1,self.v1of)
@@ -532,16 +534,26 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
 
     
     if __main__.__dict__.get('SecondLayer',False):
-	for i in xrange(0,d):    
-		for j in xrange(0,num_lgn):		
-			for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
-				setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
-				bounds.append((minw,maxw))
+	for j in xrange(0,num_lgn):		
+		for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+			setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+			bounds.append((minw,maxw))
+		
+	for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
+		for k in xrange(0,num_neurons_to_estimate):
+			setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
+			bounds.append((-2,2))
+	
+	for j in xrange(0,num_lgn):		
+		for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+			setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+			bounds.append((0,maxw))
+		
+	for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
+		for k in xrange(0,num_neurons_to_estimate):
+			setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
+			bounds.append((0,2))
 			
-		for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
-			for k in xrange(0,num_neurons_to_estimate):
-				setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
-				bounds.append((-2,2))
     else:
 	for i in xrange(0,d):    
 		for j in xrange(0,num_lgn):		
@@ -883,7 +895,7 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     (ranks,correct,pred) = performIdentification(validation_set,rpi_pred_val_act_t)
     print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2))
 		
-    if len(raw_validation_data_set) != 1:
+    if numpy.shape(raw_validation_data_set)[1] != 1:
 	signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act), numpy.array(rpi_pred_val_act))
 	signal_power,noise_power,normalized_noise_power,training_prediction_power_t,rpi_validation_prediction_power_t,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act_t), numpy.array(rpi_pred_val_act_t))
 		
@@ -903,7 +915,7 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     (ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act_t)
     print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act_t,2))
     
-    if len(raw_validation_data_set) != 1:		
+    if numpy.shape(raw_validation_data_set)[1] != 1:		
 	glm_signal_power,glm_noise_power,glm_normalized_noise_power,glm_training_prediction_power,glm_validation_prediction_power,glm_signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
 	glm_signal_power_t,glm_noise_power_t,glm_normalized_noise_power_t,glm_training_prediction_power_t,glm_validation_prediction_power_t,glm_signal_power_variances_t = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act_t), numpy.array(glm_pred_val_act_t))
 		
@@ -916,7 +928,7 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     printCorrelationAnalysis(training_set,validation_set,glm_pred_act_t,glm_pred_val_act_t)
 
     
-    if len(raw_validation_data_set) != 1:
+    if numpy.shape(raw_validation_data_set)[1] != 1:
 	pylab.figure()
 	pylab.plot(rpi_validation_prediction_power_t[:num_neurons],glm_validation_prediction_power[:num_neurons],'o')
 	pylab.hold(True)
