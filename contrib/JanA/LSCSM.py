@@ -543,16 +543,16 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
 		for k in xrange(0,num_neurons_to_estimate):
 			setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
 			bounds.append((-2,2))
-	
-	for j in xrange(0,num_lgn):		
-		for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
-			setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
-			bounds.append((0,maxw))
-		
-	for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
-		for k in xrange(0,num_neurons_to_estimate):
-			setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
-			bounds.append((0,2))
+	if __main__.__dict__.get('Divisive',False):
+		for j in xrange(0,num_lgn):		
+			for k in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):
+				setOfAlleles.add(GAllele.GAlleleRange(minw,maxw,real=True))
+				bounds.append((0,maxw))
+			
+		for j in xrange(0,int(num_neurons_to_estimate*__main__.__dict__.get('HiddenLayerSize',1.0))):		
+			for k in xrange(0,num_neurons_to_estimate):
+				setOfAlleles.add(GAllele.GAlleleRange(-2,2,real=True))
+				bounds.append((0,2))
 			
     else:
 	for i in xrange(0,d):    
@@ -593,6 +593,7 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     if __main__.__dict__.get('LGNTreshold',False):
 	genome_size += num_lgn
     
+    print 'Genome size and bounds size'
     print genome_size
     print len(bounds)
     
@@ -654,7 +655,6 @@ def fitLSCSMEvoSequential(X,Y,num_lgn,num_neurons_to_estimate):
 	rpis.append(rpi)
 	lscsms.append(lscsm)
 	rfs.append(rf)
-	
     return [numpy.vstack(Ks),numpy.hstack(rpis),lscsms,numpy.vstack(rfs)]
 	
 	
@@ -668,6 +668,20 @@ def runLSCSM():
     num_pres,num_neurons = numpy.shape(training_set)
     num_pres,kernel_size = numpy.shape(training_inputs)
     size = numpy.sqrt(kernel_size)
+    
+    
+    if __main__.__dict__.get('Delay',0):
+	delay = __main__.__dict__.get('Delay',0)
+        training_set = training_set[delay:,:]
+	validation_set = validation_set[delay:,:]
+	training_inputs = training_inputs[0:-delay,:]
+	validation_inputs = validation_inputs[0:-delay,:]
+	
+	for i in xrange(0,len(raw_validation_set)):
+		raw_validation_set[i] = raw_validation_set[i][delay:,:]
+      
+
+    
 
     raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)
     
@@ -698,6 +712,7 @@ def runLSCSM():
     db_node = db_node.get_child(params)
     
     params={}
+    params["Delay"] = __main__.__dict__.get('Delay',0)
     params["LaplacaBias"] = __main__.__dict__.get('LaplaceBias',0.0004)
     params["LGN_NUM"] = __main__.__dict__.get('LgnNum',6)
     params["num_neurons"] = __main__.__dict__.get('NumNeurons',103)
@@ -739,6 +754,8 @@ def runLSCSM():
     
     pylab.figure()
     m = numpy.max(numpy.abs(rfs))
+    print numpy.shape(rfs)
+    print num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)
     for i in xrange(0,num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0)):
 	pylab.subplot(11,11,i+1)    
     	pylab.imshow(numpy.reshape(rfs[i,0:kernel_size],(size,size)),vmin=-m,vmax=m,cmap=pylab.cm.RdBu,interpolation='nearest')
