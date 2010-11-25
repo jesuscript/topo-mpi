@@ -5,7 +5,9 @@ import pylab
 
 def sortOutLoading(db_node):
     ap = {}
-    ap["dataset"] = '2009_11_04_region3'	
+    #ap["dataset"] = 'Gallant_e0008'	
+    #ap["dataset"] = '2009_11_04_region3'
+    ap["dataset"] = __main__.__dict__.get('dataset','Gallant_e0008')
     db_node = db_node.get_child(ap)
 	
     params={}	
@@ -14,8 +16,9 @@ def sortOutLoading(db_node):
     params["normalize_activities"] = __main__.__dict__.get('NormalizeActivities',False)
     params["cut_out"] = __main__.__dict__.get('CutOut',False)
     params["validation_set_fraction"] = __main__.__dict__.get('ValidationSetFraction',50)		
-    params["density"] = __main__.__dict__.get('density', 0.15)
+    params["density"] = __main__.__dict__.get('densit  B y', 0.15)
     params["spiking"] = __main__.__dict__.get('Spiking', True)
+    params["2photon"] = __main__.__dict__.get('2photon', True)
     params['LGN'] =  __main__.__dict__.get('LGN', False)
     if params['LGN']:
     	params['LGNCenterSize'] =  __main__.__dict__.get('LGNCenterSize', 2.0) 
@@ -23,7 +26,180 @@ def sortOutLoading(db_node):
     density= params["density"]
     	
     custom_index=None
+    single_file_input = False
 	
+    if ap["dataset"] == 'Gallant_e0012':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/e0012_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=8000
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "e0012_stim.dat"	
+       
+    if ap["dataset"] == 'Gallant_e0008':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/e0008_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=8000
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "e0008_stim.dat"
+       
+    if ap["dataset"] == 'Gallant_r0212b':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0212b_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=6248
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0212b_stim.dat"	
+       
+    if ap["dataset"] == 'Gallant_r0212a':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0212b_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=6269
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0212a_stim.dat"	
+   
+    if ap["dataset"] == 'Gallant_r0212c':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0212c_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=6248
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0212c_stim.dat"	
+   
+    if ap["dataset"] == 'Gallant_r0260':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0260_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=36000
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0260_stim.dat"	
+   
+    if ap["dataset"] == 'Gallant_r0279':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r079_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=36000
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0279_stim.dat"	
+   
+   if ap["dataset"] == 'Gallant_r0284':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r084_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=18000
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0284_stim.dat"	
+
+   
+    if ap["dataset"] == 'Gallant_r0301':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0301_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=27600
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0301_stim.dat"	
+    
+    if ap["dataset"] == 'Gallant_r0305':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0305_resp.dat"	
+       num_cells = 1
+       sepparate_validation_set = False
+       num_rep=1
+       num_frames=1
+       transpose=False
+       average_frames_from=0
+       average_frames_to=1
+       inputs_offset=0
+       params["2photon"]=False
+       num_stim=35996
+       #num_stim=100
+       single_file_input=True
+       inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
+       input_match_string = "r0305_stim.dat"	
+    
+    
     if ap["dataset"] == '2010_03_12':
        dataset_loc = "/home/antolikjan/topographica/topographica/Mice/2010_03_12/Exp_nonfilt_dFoF.txt"	
        num_cells = 47    
@@ -232,7 +408,10 @@ def sortOutLoading(db_node):
 	(validation_data_set,dataset) = splitDataset(dataset,params["validation_set_fraction"])
 	validation_set = generateTrainingSet(validation_data_set)
 	ff = numpy.arange(0,num_cells,1)*0
-	validation_inputs=generateInputs(validation_data_set,inputs_directory,input_match_string,params["density"],1.8,offset=inputs_offset)
+	if single_file_input:
+		validation_inputs=generateInputsFromBinaryFile(validation_data_set,inputs_directory,input_match_string,params["density"])
+	else:
+		validation_inputs=generateInputs(validation_data_set,inputs_directory,input_match_string,params["density"],offset=inputs_offset)
     else:
 	valdataset = loadSimpleDataSet(val_dataset_loc,50,num_cells,val_reps)
 	(valdataset,trash) = splitDataset(valdataset,params["validation_set_fraction"])
@@ -245,22 +424,28 @@ def sortOutLoading(db_node):
 	for i in xrange(0,val_reps):
 	    rr.append(generateTrainingSet(averageRepetitions((index,deepcopy(raw_val_set)),reps=[i])))
 	raw_val_set = rr
-	if params["spiking"]:
+	if params["spiking"] and params["2photon"]:
 	   for i in xrange(0,val_reps):
 	       raw_val_set[i] = (raw_val_set[i])/0.028	    
 	valdataset = averageRangeFrames(valdataset,0,1)
     	valdataset = averageRepetitions(valdataset)
         validation_set = generateTrainingSet(valdataset)
-    	validation_inputs=generateInputs(valdataset,val_inputs_directory,val_input_match_string,params["density"],1.8,offset=0)
+	if single_file_input:
+		validation_inputs=generateInputsFromBinaryFil(valdataset,val_inputs_directory,val_input_match_string,params["density"])
+	else:    		
+		validation_inputs=generateInputs(valdataset,val_inputs_directory,val_input_match_string,params["density"],offset=0)
 	flat_validation_set = generateTrainingSet(flat_valdataset)
-    	flat_validation_inputs=generateInputs(flat_valdataset,val_inputs_directory,val_input_match_string,params["density"],1.8,offset=0)
+    	flat_validation_inputs=generateInputs(flat_valdataset,val_inputs_directory,val_input_match_string,params["density"],offset=0)
 	
     
 
     training_set = generateTrainingSet(dataset)
-    training_inputs=generateInputs(dataset,inputs_directory,input_match_string,params["density"],1.8,offset=inputs_offset)
+    if single_file_input:
+	training_inputs=generateInputsFromBinaryFile(dataset,inputs_directory,input_match_string,params["density"])
+    else:
+    	training_inputs=generateInputs(dataset,inputs_directory,input_match_string,params["density"],offset=inputs_offset)
     
-    if params["spiking"]:
+    if params["spiking"] and params["2photon"]:
     	training_set = (training_set)/0.028
     	validation_set = (validation_set)/0.028
     
@@ -304,6 +489,8 @@ def sortOutLoading(db_node):
     	db_node.add_data("raw_validation_set",raw_val_set,force=True)
 	db_node.add_data("flat_validation_inputs",flat_validation_inputs,force=True)
 	db_node.add_data("flat_validation_set",flat_validation_set,force=True)
+    else:
+	db_node.add_data("raw_validation_set",[validation_set],force=True)	    
     #pylab.figure()
     #pylab.plot(training_set,'o')
     
@@ -486,7 +673,7 @@ def flattenDataset(dataset):
 		z=z+1
     return (index_new,data_new)
 
-def generateInputs(dataset,directory,image_matching_string,density,aspect,offset):
+def generateInputs(dataset,directory,image_matching_string,density,offset):
     (index,data) = dataset
     import PIL
     import Image
@@ -500,8 +687,27 @@ def generateInputs(dataset,directory,image_matching_string,density,aspect,offset
         inp = image.resize((int(width*density), int(height*density)), Image.ANTIALIAS)
 	ins.append(numpy.array(inp.getdata()).reshape( int(height*density),int(width*density)))
  
-    
     return ins
+
+
+def generateInputsFromBinaryFile(dataset,directory,image_matching_string,density):
+    (index,data) = dataset	
+    
+    f = file(directory + image_matching_string, "r") 
+    data = [numpy.array(line.split()) for line in f]
+    f.close()
+
+    ins = []
+    for j in index:
+	b = data[j]
+	z = []
+	for i in xrange(0,len(b)):
+	    z.append(float(b[i]))
+        s=numpy.sqrt(len(b))	    
+        ins.append(numpy.reshape(numpy.array(z),(s,s))) 
+    return ins
+
+
 
 def cut_out_images_set(inputs,size,pos):
     (sizex,sizey) = numpy.shape(inputs[0])
