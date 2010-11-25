@@ -147,7 +147,7 @@ def sortOutLoading(db_node):
        inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
        input_match_string = "r0279_stim.dat"	
    
-   if ap["dataset"] == 'Gallant_r0284':
+    if ap["dataset"] == 'Gallant_r0284':
        dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r084_resp.dat"	
        num_cells = 1
        sepparate_validation_set = False
