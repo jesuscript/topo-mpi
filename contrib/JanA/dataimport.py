@@ -79,8 +79,8 @@ def sortOutLoading(db_node):
        inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
        input_match_string = "r0212b_stim.dat"	
        
-    if ap["dataset"] == 'Gallant_r0212a':
-       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0212b_resp.dat"	
+    if ap["dataset"] == 'Gallant_r0221a':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0221b_resp.dat"	
        num_cells = 1
        sepparate_validation_set = False
        num_rep=1
@@ -94,10 +94,10 @@ def sortOutLoading(db_node):
        #num_stim=100
        single_file_input=True
        inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
-       input_match_string = "r0212a_stim.dat"	
+       input_match_string = "r0221a_stim.dat"	
    
-    if ap["dataset"] == 'Gallant_r0212c':
-       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0212c_resp.dat"	
+    if ap["dataset"] == 'Gallant_r0225c':
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0225c_resp.dat"	
        num_cells = 1
        sepparate_validation_set = False
        num_rep=1
@@ -111,7 +111,7 @@ def sortOutLoading(db_node):
        #num_stim=100
        single_file_input=True
        inputs_directory = "/home/antolikjan/topographica/topographica/Mice/Gallant/"
-       input_match_string = "r0212c_stim.dat"	
+       input_match_string = "r0225c_stim.dat"	
    
     if ap["dataset"] == 'Gallant_r0260':
        dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0260_resp.dat"	
@@ -131,7 +131,7 @@ def sortOutLoading(db_node):
        input_match_string = "r0260_stim.dat"	
    
     if ap["dataset"] == 'Gallant_r0279':
-       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r079_resp.dat"	
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0279_resp.dat"	
        num_cells = 1
        sepparate_validation_set = False
        num_rep=1
@@ -148,7 +148,7 @@ def sortOutLoading(db_node):
        input_match_string = "r0279_stim.dat"	
    
     if ap["dataset"] == 'Gallant_r0284':
-       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r084_resp.dat"	
+       dataset_loc = "/home/antolikjan/topographica/topographica/Mice/Gallant/r0284_resp.dat"	
        num_cells = 1
        sepparate_validation_set = False
        num_rep=1
