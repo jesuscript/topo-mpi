@@ -152,6 +152,36 @@ def fit_power_to_of(activities,predicted_activities,display=True):
     return params
     
     
+def fit_addition_to_of(activities,predicted_activities1,predicted_activities2):
+    (num_in,num_ne) = numpy.shape(activities)	
+    from scipy import optimize 	
+
+    fitfunc = lambda p, x, y: p[0]*x+p[1]*y+p[2] # Target function
+    errfunc = lambda p,x,y,z: numpy.mean(numpy.power(fitfunc(p, x, y) - z,2)) # Distance to the target function
+    
+    params=[]
+    for i in xrange(0,num_ne):
+    	p0 = [1.0,1.0,0.0] # Initial guess for the parameters
+	(p,success,c)=optimize.fmin_tnc(errfunc,p0[:],bounds=[(-20,20),(-20,20),(-20,20)],args=(numpy.array(predicted_activities1[:,i].T)[0],numpy.array(predicted_activities2[:,i].T)[0],numpy.array(activities[:,i].T)[0]),approx_grad=True,messages=0)
+        params.append(p)
+    print params
+    return params
+    
+def fit_multiplication_to_of(activities,predicted_activities1,predicted_activities2):
+    (num_in,num_ne) = numpy.shape(activities)	
+    from scipy import optimize 	
+
+    fitfunc = lambda p, x, y: p[0]*(x+p[1])*(y+p[2]) # Target function
+    errfunc = lambda p,x,y,z: numpy.mean(numpy.power(fitfunc(p, x, y) - z,2)) # Distance to the target function
+    
+    params=[]
+    for i in xrange(0,num_ne):
+    	p0 = [1.0,0.0,0.0] # Initial guess for the parameters
+	(p,success,c)=optimize.fmin_tnc(errfunc,p0[:],bounds=[(-20,20),(-20,20),(-20,20)],args=(numpy.array(predicted_activities1[:,i].T)[0],numpy.array(predicted_activities2[:,i].T)[0],numpy.array(activities[:,i].T)[0]),approx_grad=True,messages=0)
+        params.append(p)
+    print params
+    return params
+    
     
 def apply_sigmoid_output_function(activities,of,offset=True):
     sig = lambda p, x: (offset*p[2]) + p[3] * 1 / (1 + numpy.exp(-p[0]*(x-p[1])))
@@ -179,12 +209,29 @@ def apply_power_output_function(activities,of):
     for i in xrange(0,y):
 	new_acts[:,i] = sig(of[i],numpy.array(activities[:,i].T)[0]).T
     return new_acts
+
+def apply_addition_output_function(activities1,activities2,of):
+    fitfunc = lambda p, x, y: p[0]*x+p[1]*y+p[2] # Target function
+    (x,y) = numpy.shape(activities1)	
+    new_acts = numpy.zeros((x,y))
     
+    for i in xrange(0,y):
+	new_acts[:,i] = fitfunc(of[i],numpy.array(activities1[:,i].T)[0],numpy.array(activities2[:,i].T)[0]).T
+    return new_acts
+    
+def apply_multiplication_output_function(activities1,activities2,of):
+    fitfunc = lambda p, x, y: p[0]*(x+p[1])*(y+p[2]) # Target function
+    (x,y) = numpy.shape(activities1)	
+    new_acts = numpy.zeros((x,y))
+    
+    for i in xrange(0,y):
+	new_acts[:,i] = fitfunc(of[i],numpy.array(activities1[:,i].T)[0],numpy.array(activities2[:,i].T)[0]).T
+    return new_acts
     
     
 def fit2DOF(pred_act1,pred_act2,act,num_bins=10):
-    bin_size1 = (numpy.max(pred_act1,axis=0) - numpy.min(pred_act1,axis=0))/6.0 
-    bin_size2 = (numpy.max(pred_act2,axis=0) - numpy.min(pred_act2,axis=0))/6.0
+    bin_size1 = (numpy.max(pred_act1,axis=0) - numpy.min(pred_act1,axis=0))/num_bins
+    bin_size2 = (numpy.max(pred_act2,axis=0) - numpy.min(pred_act2,axis=0))/num_bins
     	
     of = numpy.zeros((numpy.shape(act)[1],num_bins,num_bins))
     ofn = numpy.zeros((numpy.shape(act)[1],num_bins,num_bins))
