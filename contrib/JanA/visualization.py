@@ -48,27 +48,27 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     
     print numpy.shape(numpy.mat(training_set))
     print numpy.shape(numpy.mat(pred_act))
-    ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(pred_act),num_bins=10,display=True,name=(modelname+'_piece_wise_nonlinearity.png'))
-    pred_act_t = numpy.mat(apply_output_function(numpy.mat(pred_act),ofs))
-    pred_val_act_t = numpy.mat(apply_output_function(numpy.mat(pred_val_act),ofs))
+    ofs = contrib.JanA.ofestimation.run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(pred_act),num_bins=10,display=True,name=(modelname+'_piece_wise_nonlinearity.png'))
+    pred_act_t = numpy.mat(contrib.JanA.ofestimation.apply_output_function(numpy.mat(pred_act),ofs))
+    pred_val_act_t = numpy.mat(contrib.JanA.ofestimation.apply_output_function(numpy.mat(pred_val_act),ofs))
 
-    ofs = run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(rpi_pred_act),num_bins=10,display=True,name='RPI_piece_wise_nonlinearity.png')
-    rpi_pred_act_t = numpy.mat(apply_output_function(numpy.mat(rpi_pred_act),ofs))
-    rpi_pred_val_act_t = numpy.mat(apply_output_function(numpy.mat(rpi_pred_val_act),ofs))
+    ofs = contrib.JanA.ofestimation.run_nonlinearity_detection(numpy.mat(training_set),numpy.mat(rpi_pred_act),num_bins=10,display=True,name='RPI_piece_wise_nonlinearity.png')
+    rpi_pred_act_t = numpy.mat(contrib.JanA.ofestimation.apply_output_function(numpy.mat(rpi_pred_act),ofs))
+    rpi_pred_val_act_t = numpy.mat(contrib.JanA.ofestimation.apply_output_function(numpy.mat(rpi_pred_val_act),ofs))
     
     pylab.figure()
     pylab.title('RPI')
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
     	pylab.plot(rpi_pred_val_act[:,i],validation_set[:,i],'o')
-    release_fig('RPI_val_relationship.png')	
+    contrib.modelfit.release_fig('RPI_val_relationship.png')	
 	
     pylab.figure()
     pylab.title(modelname)
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
  	pylab.plot(pred_val_act[:,i],validation_set[:,i],'o') 
-    release_fig('GLM_val_relationship.png')	  
+    contrib.modelfit.release_fig('GLM_val_relationship.png')	  
     
     
     
@@ -77,7 +77,7 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
     	pylab.plot(rpi_pred_val_act_t[:,i],validation_set[:,i],'o')
-    release_fig('RPI_t_val_relationship.png')	
+    contrib.modelfit.release_fig('RPI_t_val_relationship.png')	
 	
 	
     pylab.figure()
@@ -85,7 +85,7 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
  	pylab.plot(pred_val_act_t[:,i],validation_set[:,i],'o')   
-    release_fig('GLM_t_val_relationship.png')
+    contrib.modelfit.release_fig('GLM_t_val_relationship.png')
     
     pylab.figure()
     print numpy.shape(numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2)[:,:num_neurons],0))
@@ -95,21 +95,21 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     pylab.plot([0.0,1.0],[0.0,1.0])
     pylab.xlabel('RPI')
     pylab.ylabel(modelname)
-    release_fig('GLM_vs_RPI_MSE.png')
+    contrib.modelfit.release_fig('GLM_vs_RPI_MSE.png')
     
     print '\n \n RPI \n'
     
     print 'Without TF'
-    performance_analysis(training_set,validation_set,rpi_pred_act,rpi_pred_val_act,raw_validation_set,85)
+    contrib.modelfit.performance_analysis(training_set,validation_set,rpi_pred_act,rpi_pred_val_act,raw_validation_set,85)
     print 'With TF'
-    (signal_power,noise_power,normalized_noise_power,training_prediction_power,rpi_validation_prediction_power,signal_power_variance) = performance_analysis(training_set,validation_set,rpi_pred_act_t,rpi_pred_val_act_t,raw_validation_set,85)
+    (signal_power,noise_power,normalized_noise_power,training_prediction_power,rpi_validation_prediction_power,signal_power_variance) = contrib.modelfit.performance_analysis(training_set,validation_set,rpi_pred_act_t,rpi_pred_val_act_t,raw_validation_set,85)
 	
     print '\n \n', modelname, '\n'
 	
     print 'Without TF'
-    (signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance) = performance_analysis(training_set,validation_set,pred_act,pred_val_act,raw_validation_set,85)
+    (signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance) = contrib.modelfit.performance_analysis(training_set,validation_set,pred_act,pred_val_act,raw_validation_set,85)
     print 'With TF'
-    (signal_power_t,noise_power_t,normalized_noise_power_t,training_prediction_power_t,validation_prediction_power_t,signal_power_variance_t) =    performance_analysis(training_set,validation_set,pred_act_t,pred_val_act_t,raw_validation_set,85)
+    (signal_power_t,noise_power_t,normalized_noise_power_t,training_prediction_power_t,validation_prediction_power_t,signal_power_variance_t) =    contrib.modelfit.performance_analysis(training_set,validation_set,pred_act_t,pred_val_act_t,raw_validation_set,85)
     
     
     significant = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) < 85) * 1.0))[0]
@@ -122,7 +122,7 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     pylab.plot([0.0,1.0],[0.0,1.0])
     pylab.xlabel('RPI')
     pylab.ylabel(modelname)
-    release_fig('GLM_vs_RPI_prediction_power.png')
+    contrib.modelfit.release_fig('GLM_vs_RPI_prediction_power.png')
     
     pylab.figure()
     pylab.plot(rpi_validation_prediction_power[significant],validation_prediction_power_t[significant ],'o')
@@ -130,7 +130,7 @@ def compareModelPerformanceWithRPI(training_set,validation_set,training_inputs,v
     pylab.plot([0.0,1.0],[0.0,1.0])
     pylab.xlabel('RPI')
     pylab.ylabel(modelname+'+TF')
-    release_fig('GLM_vs_RPI_prediction_power.png')
+    contrib.modelfit.release_fig('GLM_vs_RPI_prediction_power.png')
 
 
 
@@ -298,3 +298,4 @@ def printCorrelationAnalysis(act,val_act,pred_act,pred_val_act):
         val_c.append(scipy.stats.pearsonr(numpy.array(val_act)[:,i].flatten(),numpy.array(pred_val_act)[:,i].flatten())[0])
     
     print 'Correlation Coefficients (training/validation): ' + str(numpy.mean(train_c)) + '/' + str(numpy.mean(val_c))
+    return (train_c,val_c)
