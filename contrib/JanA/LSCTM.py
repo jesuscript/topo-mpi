@@ -282,19 +282,19 @@ def runLSCTM():
     raw_validation_set = db_node.data["raw_validation_set"]
     
     
-    training_inputs1 = training_inputs[4:,:]
-    validation_inputs1 = validation_inputs[4:,:]
-    training_inputs2 = training_inputs[3:-1,:]
-    validation_inputs2 = validation_inputs[3:-1,:]
+    training_inputs1 = training_inputs[0:-4,:]
+    validation_inputs1 = validation_inputs[0:-4,:]
+    training_inputs2 = training_inputs[1:-3,:]
+    validation_inputs2 = validation_inputs[1:-3,:]
     training_inputs3 = training_inputs[2:-2,:]
     validation_inputs3 = validation_inputs[2:-2,:]
     
     
-    training_set = training_set[0:-4,:]
-    validation_set = validation_set[0:-4,:]
+    training_set = training_set[4:0,:]
+    validation_set = validation_set[4:0,:]
 	
     for i in xrange(0,len(raw_validation_set)):
-	raw_validation_set[i] = raw_validation_set[i][4:,:]
+	raw_validation_set[i] = raw_validation_set[i][4:0,:]
     
     num_pres,num_neurons = numpy.shape(training_set)
     num_pres,kernel_size = numpy.shape(training_inputs)
