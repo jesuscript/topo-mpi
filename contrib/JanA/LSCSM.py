@@ -16,7 +16,9 @@ import contrib.JanA.dataimport
 from contrib.JanA.regression import laplaceBias
 from pyevolve import *
 from contrib.JanA.visualization import printCorrelationAnalysis
-
+from theano.tensor.shared_randomstreams import RandomStreams
+from topo import numbergen
+import contrib.JanA.SG
 
 #profmode = theano.ProfileMode(optimizer='FAST_RUN', linker=theano.gof.OpWiseCLinker())
 
@@ -28,12 +30,13 @@ class LSCSM(object):
 	    self.num_neurons = num_neurons
 	    self.size = numpy.sqrt(self.image_size)
 
-	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten())	
-	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten())
-	    self.Y = theano.shared(YY)
-    	    self.X = theano.shared(XX)
+	    self.xx = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten(),dtype=theano.config.floatX))	
+	    self.yy = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten(),dtype=theano.config.floatX))
+	    self.Y = theano.shared(numpy.asarray(YY,dtype=theano.config.floatX))
+    	    self.X = theano.shared(numpy.asarray(XX,dtype=theano.config.floatX))
 	    self.of = __main__.__dict__.get('OF','Exp')
-	    self.K = T.dvector('K')
+	    self.K = T.fvector('K')
+	    self.index = T.lscalar
 	    #self.KK = theano.printing.Print(message='My mesasge')(self.K)
 	    self.x = self.K[0:self.num_lgn]
 	    self.y = self.K[self.num_lgn:2*self.num_lgn]
@@ -107,23 +110,30 @@ class LSCSM(object):
 
 	
 class LSCSM1(object):
-	def __init__(self,XX,YY,num_lgn,num_neurons):
+	def __init__(self,XX,YY,num_lgn,num_neurons,batch_size=100):
 	    (self.num_pres,self.image_size) = numpy.shape(XX)
 	    self.num_lgn = num_lgn
 	    self.num_neurons = num_neurons
 	    self.size = numpy.sqrt(self.image_size)
 	    self.hls = __main__.__dict__.get('HiddenLayerSize',1.0)
-	    self.divisive = __main__.__dict__.get('Divisive',False)	    
+	    self.divisive = __main__.__dict__.get('Divisive',False)
+	    self.batch_size=batch_size	    
 
-	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten())	
-	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten())
-	    self.Y = theano.shared(YY)
-    	    self.X = theano.shared(XX)
+	    self.xx = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten(),dtype=theano.config.floatX))	
+	    self.yy = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten(),dtype=theano.config.floatX))
+	    
+	    self.Y = theano.shared(numpy.asarray(YY,dtype=theano.config.floatX))
+    	    self.X = theano.shared(numpy.asarray(XX,dtype=theano.config.floatX))
 	    
 	    self.v1of = __main__.__dict__.get('V1OF','Exp')
 	    self.lgnof = __main__.__dict__.get('LGNOF','Exp')
 	    
-	    self.K = T.dvector('K')
+	    self.K = T.fvector('K')
+	    self.index = T.lscalar('I')
+	    
+	    #srng = RandomStreams(seed=234)
+	    #self.index = srng.random_integers((1,1),high=self.num_pres-batch_size)[0]
+
 	    
 	    self.x = self.K[0:self.num_lgn]
 	    self.y = self.K[self.num_lgn:2*self.num_lgn]
@@ -363,9 +373,8 @@ bounds = []
 class BoundsSafeFunction(object):	
       def __init__(self,function,bounds):
 	  self.fun = function
-	  self.mins = zip(bounds)[0]	
-	  self.maxs = zip(bounds)[1]
-      	
+	  self.mins = zip*(bounds)[0]	
+	  self.maxs = zip*(bounds)[1]
       def fun(inp):
 	  print 'C'
 	  print inp
@@ -386,28 +395,62 @@ class BoundsSafeFunction(object):
        		return z 	
       	
 	
+def func(inp):
+	  index = int(contrib.JanA.LSCSM.r()*(contrib.JanA.LSCSM.num_pres-contrib.JanA.LSCSM.batch_size))
+	  contrib.JanA.LSCSM.lscsm.X.value = contrib.JanA.LSCSM.X[index:index+contrib.JanA.LSCSM.batch_size,:]
+	  contrib.JanA.LSCSM.lscsm.Y.value = contrib.JanA.LSCSM.Y[index:index+contrib.JanA.LSCSM.batch_size,:]	  
+	  return contrib.JanA.LSCSM.fun(inp) 
+      
+def der(inp):
+	  index = int(contrib.JanA.LSCSM.r()*(contrib.JanA.LSCSM.num_pres-contrib.JanA.LSCSM.batch_size))
+	  contrib.JanA.LSCSM.lscsm.X.value = contrib.JanA.LSCSM.X[index:index+contrib.JanA.LSCSM.batch_size,:]
+	  contrib.JanA.LSCSM.lscsm.Y.value = contrib.JanA.LSCSM.Y[index:index+contrib.JanA.LSCSM.batch_size,:]
+	  return contrib.JanA.LSCSM.de(inp) 
+	
+	
 class GGEvo(object):
-      def __init__(self,XX,YY,num_lgn,num_neurons,bounds):
+      def __init__(self,XX,YY,num_lgn,num_neurons,bounds,batch_size=600):
 		self.XX = XX
 		self.YY = YY
+		self.batch_size = batch_size
 		self.num_lgn = num_lgn
 		self.num_neurons = num_neurons
+		self.num_pres = numpy.shape(XX)[0]
 		self.lscsm = LSCSM1(numpy.mat(XX),numpy.mat(YY),num_lgn,num_neurons)
-		self.func = self.lscsm.func() 
-		self.der = self.lscsm.der()
+		self.lscsm_func = self.lscsm.func() 
+		self.lscsm_der = self.lscsm.der()
 		self.num_eval = __main__.__dict__.get('NumEval',10)
 		self.bounds = bounds
+		self.r = numbergen.UniformRandom(seed=513)
+		
+		contrib.JanA.LSCSM.fun = self.lscsm_func
+		contrib.JanA.LSCSM.de = self.lscsm_der
+		contrib.JanA.LSCSM.r= self.r
+		contrib.JanA.LSCSM.X =  self.XX
+		contrib.JanA.LSCSM.Y =  self.YY
+		contrib.JanA.LSCSM.lscsm= self.lscsm
+		contrib.JanA.LSCSM.batch_size = self.batch_size
+		contrib.JanA.LSCSM.num_pres = self.num_pres
 		
       def perform_gradient_descent(self,chromosome):
 	  inp = numpy.array([v for v in chromosome])
 	  
 	  if self.num_eval != 0:
-	  	(new_K,success,c)=fmin_tnc(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,messages=0)
+	  	
 		#(new_K,success,c)=fmin_l_bfgs_b(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,m=100)
 		
-	  	for i in xrange(0,len(chromosome)):
+		if __main__.__dict__.get('LRAlg','TNC'):
+			(new_K,success,c)=fmin_tnc(self.lscsm_func,inp[:],fprime=self.lscsm_der,bounds=self.bounds,maxfun = self.num_eval,messages=0,approx_grad=0)
+		
+		if __main__.__dict__.get('LRAlg','SG'):
+			new_K = contrib.JanA.SG.SG(inp,self.XX,self.YY,self.lscsm,self.lscsm_der,self.bounds,learning_rate=__main__.__dict__.get('LR',0.000001),num_steps=self.num_eval,batch_size=__main__.__dict__.get('BATCH_SIZE',600))
+	  	
+			
+		for i in xrange(0,len(chromosome)):
 	  		chromosome[i] = new_K[i]
-		score = self.func(numpy.array(new_K))			
+		self.lscsm.X.value = self.XX			
+		self.lscsm.Y.value = self.YY
+		score = self.lscsm_func(numpy.array(new_K))			
 	  else:
 		print 'DERIVATION'
 		print self.der(numpy.array(inp))
@@ -424,7 +467,7 @@ class GGEvo(object):
 	  return score
 
 
-      	
+      		
 	
 def objF(inp):
 	  a = numpy.array(zip(contrib.JanA.LSCSM.bounds))
@@ -624,10 +667,12 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     
     #print best
     inp = [v for v in best]
-    (new_K,success,c)=fmin_tnc(ggevo.func,inp[:],fprime=ggevo.der,bounds=bounds,maxfun = __main__.__dict__.get('FinalNumEval',10000),messages=0)
+    (new_K,success,c)=fmin_tnc(func,inp[:],fprime=der,bounds=bounds,maxfun = __main__.__dict__.get('FinalNumEval',10000),messages=0)
     #inp[:-1] = numpy.reshape(inp[:-1],(num_lgn,4)).T.flatten()
     print 'Final likelyhood'
-    print ggevo.func(new_K)
+    ggevo.lscsm.X.value = ggevo.XX			
+    ggevo.lscsm.Y.value = ggevo.YY
+    print ggevo.lscsm_func(new_K)
     Ks = new_K
     #rf= ggevo.lscsm.returnRFs(numpy.array([Ks[i,:]]))
 
@@ -782,7 +827,7 @@ def runLSCSM():
     
     to_delete=[]
     
-    if len(raw_validation_data_set) != 1:
+    if len(raw_validation_set) != 1:
     
 	signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
 	
@@ -807,8 +852,8 @@ def runLSCSM():
 		
 		runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
 		
-	db_node.add_data("Kernels",K,force=True)
-	db_node.add_data("LSCSM",glm,force=True)
+    db_node.add_data("Kernels",K,force=True)
+    db_node.add_data("LSCSM",glm,force=True)
 	
     contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','res.dat')))
     
@@ -906,11 +951,11 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
     
     print 'RPI \n'
 	
-    (ranks,correct,pred) = performIdentification(validation_set,rpi_pred_val_act)
-    print "Natural:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - rpi_pred_val_act,2))
+    #(ranks,correct,pred) = performIdentification(validation_set,rpi_pred_val_act)
+    #print "Natural:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - rpi_pred_val_act,2))
 	
-    (ranks,correct,pred) = performIdentification(validation_set,rpi_pred_val_act_t)
-    print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2))
+    #(ranks,correct,pred) = performIdentification(validation_set,rpi_pred_val_act_t)
+    #print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - rpi_pred_val_act_t,2))
 		
     if numpy.shape(raw_validation_data_set)[1] != 1:
 	signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(rpi_pred_act), numpy.array(rpi_pred_val_act))
@@ -926,11 +971,11 @@ def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act
 
     print '\n \n GLM \n'
 	
-    (ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act)
-    print "Natural:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act,2))
+    #(ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act)
+    #print "Natural:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act,2))
 	
-    (ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act_t)
-    print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act_t,2))
+    #(ranks,correct,pred) = performIdentification(validation_set,glm_pred_val_act_t)
+    #print "Natural+TF:", correct , "Mean rank:", numpy.mean(ranks) , "MSE", numpy.mean(numpy.power(validation_set - glm_pred_val_act_t,2))
     
     if numpy.shape(raw_validation_data_set)[1] != 1:		
 	glm_signal_power,glm_noise_power,glm_normalized_noise_power,glm_training_prediction_power,glm_validation_prediction_power,glm_signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), numpy.array(glm_pred_act), numpy.array(glm_pred_val_act))
