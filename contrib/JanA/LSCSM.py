@@ -439,10 +439,10 @@ class GGEvo(object):
 	  	
 		#(new_K,success,c)=fmin_l_bfgs_b(self.func,inp[:],fprime=self.der,bounds=self.bounds,maxfun = self.num_eval,m=100)
 		
-		if __main__.__dict__.get('LRAlg','TNC'):
+		if __main__.__dict__.get('LRAlg','TNC') == 'TNC':
 			(new_K,success,c)=fmin_tnc(self.lscsm_func,inp[:],fprime=self.lscsm_der,bounds=self.bounds,maxfun = self.num_eval,messages=0,approx_grad=0)
 		
-		if __main__.__dict__.get('LRAlg','SG'):
+		if __main__.__dict__.get('LRAlg','TNC') == 'SG':
 			new_K = contrib.JanA.SG.SG(inp,self.XX,self.YY,self.lscsm,self.lscsm_der,self.bounds,learning_rate=__main__.__dict__.get('LR',0.000001),num_steps=self.num_eval,batch_size=__main__.__dict__.get('BATCH_SIZE',600))
 	  	
 			
