@@ -35,6 +35,7 @@ from topo.pattern.basic import Gaussian
 from topo.learningfn.projfn import CFPLF_Trace
 from topo.base.functionfamily import CoordinateMapperFn
 from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Translator,SimpleHomeoSigmoid, Jitterer, AddGC, SimpleHomeoLinear, Expander
+from topo.misc.numbergenerator import UniformRandom, BoundedNumber, ExponentialDecay
 
 
 topo.sim.name = "CCSimple"
@@ -49,7 +50,7 @@ dataset=locals().get('dataset',"Natural") #set the input type by choosing the da
 
 
 if dataset=="Line":
-        input= Translator(generator=topo.pattern.basic.Line(   x=numbergen.UniformRandom(lbound=-(core_size+0.15),ubound=(core_size+0.15),seed=1023),   y=numbergen.UniformRandom(lbound=-(core_size+0.15),ubound=(core_size+0.15),seed=53),size=1.0, offset=0.5,scale=numbergen.Choice(choices=[-0.5,0.5],seed=56),bounds = BoundingBox(radius=0.8),thickness=0.04,smoothing=0.0),orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=locals().get('Period',10),speed=locals().get('Speed',0.02))
+        input= Translator(generator=topo.pattern.basic.Line(   x=UniformRandom(lbound=-(core_size+0.15),ubound=(core_size+0.15),seed=1023),   y=UniformRandom(lbound=-(core_size+0.15),ubound=(core_size+0.15),seed=53),size=1.0, offset=0.5,scale=Choice(choices=[-0.5,0.5],seed=56),bounds = BoundingBox(radius=0.8),thickness=0.04,smoothing=0.0),orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=locals().get('Period',10),speed=locals().get('Speed',0.02))
 elif dataset=="Natural":
     import topo.pattern.image 
     input_type=topo.pattern.image.FileImage
@@ -207,11 +208,11 @@ if False:
                         weights_generator=off_weights)
 else:
     topo.sim.connect('FakeRetina','LGNOn',delay=0.05,
-                     connection_type=OneToOneProjection,strength=0.5,
+                     connection_type=OneToOneProjection,strength=locals().get('RetinaStrFS',0.5),
                      nominal_bounds=BoundingBox(radius=0.375),name='Afferent')
     
     topo.sim.connect('FakeRetina','LGNOff',delay = 0.05,
-                     connection_type=OneToOneProjection,strength=0.5,
+                     connection_type=OneToOneProjection,strength=locals().get('RetinaStrFS',0.5),
                      nominal_bounds=BoundingBox(radius=0.375),name='Afferent')
 
 
@@ -352,12 +353,12 @@ if __main__.__dict__.get('GC',True):
 
 def secondStage():
     topo.sim.connect('Retina','LGNOn',delay=0.05,
-                    connection_type=SharedWeightCFProjection,strength=2.33,
+                    connection_type=SharedWeightCFProjection,strength=locals().get('RetinaStrSS',2.33),
                     nominal_bounds_template=BoundingBox(radius=0.375),name='LGNOnAfferent3',
                     weights_generator=on_weights)
     
     topo.sim.connect('Retina','LGNOff',delay = 0.05,
-                    connection_type=SharedWeightCFProjection,strength=2.33,
+                    connection_type=SharedWeightCFProjection,strength=locals().get('RetinaStrSS',2.33),
                     nominal_bounds_template=BoundingBox(radius=0.375),name='LGNOffAfferent4',
                     weights_generator=off_weights)
     
@@ -368,11 +369,11 @@ def secondStage():
     
 from topo.analysis.featureresponses import MeasureResponseCommand, FeatureMaps, SinusoidalMeasureResponseCommand
 FeatureMaps.num_orientation=16
-MeasureResponseCommand.scale=3.0
-MeasureResponseCommand.duration=4.0
-SinusoidalMeasureResponseCommand.frequencies=[4.0]
-FeatureCurveCommand.num_orientation=90
-FeatureCurveCommand.curve_parameters=[{"contrast":10},{"contrast":90}]
+MeasureResponseCommand.scale=1.0
+MeasureResponseCommand.duration=2.0
+SinusoidalMeasureResponseCommand.frequencies=[2.4]
+FeatureCurveCommand.num_orientation=16
+FeatureCurveCommand.curve_parameters=[{"contrast":15},{"contrast":50},{"contrast":90}]
 
 
 def check_activity(a,b,c,d,e,f,g,h,i,j):
