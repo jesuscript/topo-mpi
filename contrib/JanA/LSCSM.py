@@ -147,14 +147,6 @@ class LSCSM1(object):
 		    self.rs = self.K[idx+self.num_lgn:idx+2*self.num_lgn]
 		    idx = idx  + 2*self.num_lgn
 	    
-	    #self.x = theano.printing.Print(message='x:')(self.x)
-	    #self.y = theano.printing.Print(message='y:')(self.y)
-	    #self.sc = theano.printing.Print(message='sc:')(self.sc)
-	    #self.ss = theano.printing.Print(message='ss:')(self.ss)
-	    
-	    
-	    
-	    
 	    if __main__.__dict__.get('LGNTreshold',False):
 	    	self.ln = self.K[idx:idx + self.num_lgn]
 		idx += self.num_lgn
@@ -423,6 +415,13 @@ class GGEvo(object):
 		self.bounds = bounds
 		self.r = numbergen.UniformRandom(seed=513)
 		
+		if __main__.__dict__.get('EarlyStop',False):
+		   self.valXX = XX[0:__main__.__dict__.get('EarlyStopSize',100),:]	
+		   self.valYY = YY[0:__main__.__dict__.get('EarlyStopSize',100),:]
+		   self.XX = XX[__main__.__dict__.get('EarlyStopSize',100):,:]
+		   self.YY = YY[__main__.__dict__.get('EarlyStopSize',100):,:]
+		   			
+					
 		contrib.JanA.LSCSM.fun = self.lscsm_func
 		contrib.JanA.LSCSM.de = self.lscsm_der
 		contrib.JanA.LSCSM.r= self.r
@@ -448,9 +447,18 @@ class GGEvo(object):
 			
 		for i in xrange(0,len(chromosome)):
 	  		chromosome[i] = new_K[i]
-		self.lscsm.X.value = self.XX			
-		self.lscsm.Y.value = self.YY
-		score = self.lscsm_func(numpy.array(new_K))			
+		
+		if __main__.__dict__.get('EarlyStop',False):
+			self.lscsm.X.value = self.valXX			
+			self.lscsm.Y.value = self.valYY
+			score = self.lscsm_func(numpy.array(new_K))
+			self.lscsm.X.value = self.XX			
+			self.lscsm.Y.value = self.YY
+		else:
+			self.lscsm.X.value = self.XX			
+			self.lscsm.Y.value = self.YY
+			score = self.lscsm_func(numpy.array(new_K))			
+		
 	  else:
 		print 'DERIVATION'
 		print self.der(numpy.array(inp))
@@ -667,7 +675,9 @@ def fitLSCSMEvo(X,Y,num_lgn,num_neurons_to_estimate):
     
     #print best
     inp = [v for v in best]
-    (new_K,success,c)=fmin_tnc(func,inp[:],fprime=der,bounds=bounds,maxfun = __main__.__dict__.get('FinalNumEval',10000),messages=0)
+    ggevo.lscsm.X.value = ggevo.XX			
+    ggevo.lscsm.Y.value = ggevo.YY
+    (new_K,success,c)=fmin_tnc(ggevo.lscsm_func,inp[:],fprime=ggevo.lscsm_der,bounds=ggevo.bounds,maxfun=__main__.__dict__.get('FinalNumEval',10000),messages=0,approx_grad=0)
     #inp[:-1] = numpy.reshape(inp[:-1],(num_lgn,4)).T.flatten()
     print 'Final likelyhood'
     ggevo.lscsm.X.value = ggevo.XX			
