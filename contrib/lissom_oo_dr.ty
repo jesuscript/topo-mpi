@@ -1,7 +1,9 @@
 """
 A LISSOM-based direction map (with ON/OFF channels).
 
-Under construction: moving away from the '4 eyes' approach.
+Under construction: no longer uses the '4 eyes' approach, but results
+have not yet been investigated (and have not been matched to existing
+lissom.ty results).
 
 $Id$
 """
@@ -63,7 +65,8 @@ num_inputs=1
 num_lags=4
 input_period=num_lags # By default
 
-
+# CEBALERT: note that we have pattern.Sweeper and pattern.Translator;
+# must both exist?
 input = pattern.Translator(
     x=numbergen.UniformRandom(lbound=-0.75,
                               ubound=0.75,seed=12),
@@ -191,7 +194,7 @@ MeasureResponseCommand.duration=4.0
 MeasureResponseCommand.apply_output_fns=True
 MeasureResponseCommand.scale=0.5 # CB: I set this for the speed-2 network
 
-# CB: temporary (to get new direction map measurement)
+# CBALERT: temporary (to get new direction map measurement)
 _new_motion_model=True
 
 import topo.command.basic
