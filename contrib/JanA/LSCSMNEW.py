@@ -310,6 +310,8 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 	pylab.plot(eserr,'g')	
 	pylab.draw()
 
+
+    pylab.savefig(normalize_path('Error_evolution.png'))
     rfs = lscsm.returnRFs(Ks)
     kernel_size =  numpy.shape(training_inputs)[1]
     laplace = laplaceBias(numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))
