@@ -276,7 +276,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
     der = lscsm.der()
     bounds = lscsm.generateBounds()
     
-    rand =numbergen.UniformRandom(seed=513)
+    rand =numbergen.UniformRandom(seed=__main__.__dict__.get('Seed',513))
     
     Ks = []
     terr=[]
@@ -290,6 +290,9 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 
     [Ks.append(a[0]+rand()*(a[1]-a[0])/2.0)  for a in bounds]
     
+    best_Ks = list(Ks)
+    best_eserr = 100000000000000000000000000000000000
+    time_since_best=0
     
     for i in xrange(0,__main__.__dict__.get('NumEpochs',100)):
         print i
@@ -309,7 +312,25 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 	pylab.plot(terr,'b')
 	pylab.plot(eserr,'g')	
 	pylab.draw()
+	
+	if best_eserr > eserr[-1]:
+	   best_eserr = eserr[-1]
+	   best_Ks = list(Ks)
+	   time_since_best = 0
+	else:
+	   time_since_best+=1
+	
+	if __main__.__dict__.get('EarlyStopping',False):
+	   if time_since_best > 15:
+	      break
 
+    if __main__.__dict__.get('EarlyStopping',False):
+       Ks = best_Ks
+
+    print 'Final training error: ', func(numpy.array(Ks))/ numpy.shape(early_stopping_set)[0] 
+    lscsm.X.value = early_stopping_inputs
+    lscsm.Y.value = early_stopping_set
+    print 'Final testing error: ', func(numpy.array(Ks))/ numpy.shape(early_stopping_set)[0] 
 
     pylab.savefig(normalize_path('Error_evolution.png'))
     rfs = lscsm.returnRFs(Ks)
