@@ -365,6 +365,7 @@ class LSCSMNEW(object):
             lgn_output = self.construct_of(lgn_output,self.lgnof)
 	       
 	    self.output = T.dot(lgn_output,self.a)
+	    self.d_output = T.dot(lgn_output,self.d)
 	    #self.output = theano.printing.Print(message='Output1:')(self.output)
 	    
 	    #self.n = theano.printing.Print(message='N:')(self.n)
@@ -373,10 +374,9 @@ class LSCSMNEW(object):
 	    
 	    if __main__.__dict__.get('SecondLayer',False):
 	       if self.divisive:
-	       		#self.model_output = self.construct_of((self.output-self.n1)/(1.0+T.dot(lgn_output,self.d)-self.nd1),self.v1of)
-			
 			self.model_output = self.construct_of(self.output-self.n1,self.v1of)
-	       		self.model_output = self.construct_of( (T.dot(self.model_output , self.a1) - self.n)/(1.0+T.dot(self.model_output , self.d1) - self.nd),self.v1of)
+			self.d_model_output = self.construct_of(self.d_output-self.nd1,self.v1of)
+	       		self.model_output = self.construct_of((T.dot(self.model_output , self.a1) - self.n)/(1+self.construct_of(T.dot(self.d_model_output , self.d1) - self.nd,self.v1of)),self.v1of)
 	       else:
 		        self.model_output = self.construct_of(self.output-self.n1,self.v1of)
 	       		self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n,self.v1of)
