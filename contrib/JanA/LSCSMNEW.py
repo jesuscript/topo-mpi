@@ -247,7 +247,7 @@ class LSCSM(object):
 			  
 		  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
 			  for k in xrange(0,self.num_neurons):
-				  bounds.append((-4,4))
+				  bounds.append((-__main__.__dict__.get('MaxWL2',4),__main__.__dict__.get('MaxWL2',4)))
 	      else:
 		  for j in xrange(0,self.num_lgn):		
 			  for k in xrange(0,self.num_neurons):
@@ -263,6 +263,331 @@ class LSCSM(object):
 			  bounds.append((0,20))
 	      return bounds
 
+
+
+
+class LSCSMNEW(object):
+	def __init__(self,XX,YY,num_lgn,num_neurons,batch_size=100):
+	    (self.num_pres,self.kernel_size) = numpy.shape(XX)
+	    self.num_lgn = num_lgn
+	    self.num_neurons = num_neurons
+	    self.size = numpy.sqrt(self.kernel_size)
+	    self.hls = __main__.__dict__.get('HiddenLayerSize',1.0)
+	    self.divisive = __main__.__dict__.get('Divisive',False)
+	    self.batch_size=batch_size	    
+
+	    self.xx = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten(),dtype=theano.config.floatX))	
+	    self.yy = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten(),dtype=theano.config.floatX))
+	    
+	    self.Y = theano.shared(numpy.asarray(YY,dtype=theano.config.floatX))
+    	    self.X = theano.shared(numpy.asarray(XX,dtype=theano.config.floatX))
+	    
+	    self.v1of = __main__.__dict__.get('V1OF','Exp')
+	    self.lgnof = __main__.__dict__.get('LGNOF','Exp')
+	    
+	    self.K = T.fvector('K')
+	    self.index = T.lscalar('I')
+	    
+	    #srng = RandomStreams(seed=234)
+	    #self.index = srng.random_integers((1,1),high=self.num_pres-batch_size)[0]
+
+	    
+	    self.x = self.K[0:self.num_lgn]
+	    self.y = self.K[self.num_lgn:2*self.num_lgn]
+	    self.sc = self.K[2*self.num_lgn:3*self.num_lgn]
+	    self.ss = self.K[3*self.num_lgn:4*self.num_lgn]
+	    
+	    idx = 4*self.num_lgn
+	    
+	    if not __main__.__dict__.get('BalancedLGN',True):
+		    self.rc = self.K[idx:idx+self.num_lgn]
+		    self.rs = self.K[idx+self.num_lgn:idx+2*self.num_lgn]
+		    idx = idx  + 2*self.num_lgn
+	    
+	    if __main__.__dict__.get('LGNTreshold',False):
+	    	self.ln = self.K[idx:idx + self.num_lgn]
+		idx += self.num_lgn
+	    
+	    
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       self.a = T.reshape(self.K[idx:idx+int(num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+	       idx +=  int(num_neurons*self.hls)*self.num_lgn		    
+	       self.a1 = T.reshape(self.K[idx:idx+num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       idx = idx+num_neurons*int(num_neurons*self.hls)
+	       if self.divisive:
+		       self.d = T.reshape(self.K[idx:idx+int(num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+		       idx +=  int(num_neurons*self.hls)*self.num_lgn		    
+	       	       self.d1 = T.reshape(self.K[idx:idx+num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       	       idx = idx+num_neurons*int(num_neurons*self.hls)
+	    else:
+	       self.a = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+	       idx +=  num_neurons*self.num_lgn
+	       if self.divisive:	       
+	               self.d = T.reshape(self.K[idx:idx+num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+		       idx +=  num_neurons*self.num_lgn
+
+	    
+	    self.n = self.K[idx:idx+self.num_neurons]
+	    idx +=  num_neurons
+	    
+	    if self.divisive:
+		    self.nd = self.K[idx:idx+self.num_neurons]
+		    idx +=  num_neurons
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       self.n1 = self.K[idx:idx+int(self.num_neurons*self.hls)]
+	       idx +=  int(self.num_neurons*self.hls)
+	       if self.divisive:
+		       self.nd1 = self.K[idx:idx+int(self.num_neurons*self.hls)]
+		       idx +=  int(self.num_neurons*self.hls)
+	    
+	    if __main__.__dict__.get('BalancedLGN',True):
+		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
+	    
+	    else:
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
+	    
+	    #lgn_output = theano.printing.Print(message='lgn output:')(lgn_output)
+	    
+	    lgn_output = lgn_output.T
+	    
+	    if __main__.__dict__.get('LGNTreshold',False):
+	       lgn_output = lgn_output - self.ln.T
+            lgn_output = self.construct_of(lgn_output,self.lgnof)
+	       
+	    self.output = T.dot(lgn_output,self.a)
+	    #self.output = theano.printing.Print(message='Output1:')(self.output)
+	    
+	    #self.n = theano.printing.Print(message='N:')(self.n)
+	    
+	    #self.output = theano.printing.Print(message='Output2:')(self.output)
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	       if self.divisive:
+	       		#self.model_output = self.construct_of((self.output-self.n1)/(1.0+T.dot(lgn_output,self.d)-self.nd1),self.v1of)
+			
+			self.model_output = self.construct_of(self.output-self.n1,self.v1of)
+	       		self.model_output = self.construct_of( (T.dot(self.model_output , self.a1) - self.n)/(1.0+T.dot(self.model_output , self.d1) - self.nd),self.v1of)
+	       else:
+		        self.model_output = self.construct_of(self.output-self.n1,self.v1of)
+	       		self.model_output = self.construct_of(T.dot(self.model_output , self.a1) - self.n,self.v1of)
+	    else:
+	       if self.divisive:
+                  self.model_output = self.construct_of((self.output-self.n)/(1.0+T.dot(lgn_output,self.d)-self.nd),self.v1of)
+	       else:
+		  self.model_output = self.construct_of(self.output-self.n,self.v1of)
+	    
+	    
+   	    if __main__.__dict__.get('LL',True):
+	       #self.model_output = theano.printing.Print(message='model output:')(self.model_output)
+	       ll = T.sum(self.model_output) - T.sum(self.Y * T.log(self.model_output+0.0000000000000000001))
+	       
+	       if __main__.__dict__.get('Sparse',False):
+		  ll += __main__.__dict__.get('FLL1',1.0)*T.sum(abs(self.a)) + __main__.__dict__.get('FLL2',1.0)*T.sum(self.a**2) 
+ 		  if __main__.__dict__.get('SecondLayer',False):
+			ll += __main__.__dict__.get('SLL1',1.0)*T.sum(abs(self.a1)) + __main__.__dict__.get('SLL2',1.0)**T.sum(self.a1**2)
+	       
+	    else:
+	       ll = T.sum(T.sqr(self.model_output - self.Y)) 
+
+	    #ll = theano.printing.Print(message='LL:')(ll)
+	    self.loglikelyhood =  ll
+	
+	def func(self):
+	    return theano.function(inputs=[self.K], outputs=self.loglikelyhood,mode='FAST_RUN')
+	
+	def der(self):
+	    g_K = T.grad(self.loglikelyhood, self.K)
+	    return theano.function(inputs=[self.K], outputs=g_K,mode='FAST_RUN')
+	
+	def response(self,X,kernels):
+	    self.X.value = X
+	    
+	    resp = theano.function(inputs=[self.K], outputs=self.model_output,mode='FAST_RUN')
+	    return resp(kernels)	
+	
+	def construct_of(self,inn,of):
+   	    if of == 'Linear':
+	       return inn
+    	    if of == 'Exp':
+	       return T.exp(inn)
+	    elif of == 'Sigmoid':
+	       return 5.0 / (1.0 + T.exp(-inn))
+    	    elif of == 'SoftSign':
+	       return inn / (1 + T.abs_(inn)) 
+	    elif of == 'Square':
+	       return T.sqr(inn)
+	    elif of == 'ExpExp':
+	       return T.exp(T.exp(inn))  	
+	    elif of == 'ExpSquare':
+	       return T.exp(T.sqr(inn))
+	    elif of == 'LogisticLoss':
+	       return __main__.__dict__.get('LogLossCoef',1.0)*T.log(1+T.exp(__main__.__dict__.get('LogLossCoef',1.0)*inn))
+
+	
+	def returnRFs(self,K):
+	    x = K[0:self.num_lgn]
+	    y = K[self.num_lgn:2*self.num_lgn]
+	    sc = K[2*self.num_lgn:3*self.num_lgn]
+	    ss = K[3*self.num_lgn:4*self.num_lgn]
+	    idx = 4*self.num_lgn
+	    
+	    if not __main__.__dict__.get('BalancedLGN',True):
+		    rc = K[idx:idx+self.num_lgn]
+		    rs = K[idx+self.num_lgn:idx+2*self.num_lgn]
+		    idx = idx  + 2*self.num_lgn
+	    
+    	    if __main__.__dict__.get('LGNTreshold',False):
+	    	ln = K[idx:idx + self.num_lgn]
+            	idx += self.num_lgn
+		
+	    if __main__.__dict__.get('SecondLayer',False):
+	       a = numpy.reshape(K[idx:idx+int(self.num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+	       idx +=  int(self.num_neurons*self.hls)*self.num_lgn		    
+	       a1 = numpy.reshape(K[idx:idx+self.num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       idx = idx+self.num_neurons*int(self.num_neurons*self.hls)
+	       if self.divisive:
+		       d = numpy.reshape(K[idx:idx+int(self.num_neurons*self.hls)*self.num_lgn],(self.num_lgn,int(self.num_neurons*self.hls)))
+		       idx +=  int(self.num_neurons*self.hls)*self.num_lgn		    
+	       	       d1 = numpy.reshape(K[idx:idx+self.num_neurons*int(self.num_neurons*self.hls)],(int(self.num_neurons*self.hls),self.num_neurons))
+	       	       idx = idx+self.num_neurons*int(self.num_neurons*self.hls)
+
+	    else:
+	       a = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+	       idx +=  self.num_neurons*self.num_lgn
+       	       if self.divisive:	       
+	               d = numpy.reshape(K[idx:idx+self.num_neurons*self.num_lgn],(self.num_lgn,self.num_neurons))
+		       idx +=  self.num_neurons*self.num_lgn
+
+	
+	    n = K[idx:idx+self.num_neurons]
+
+	    if __main__.__dict__.get('SecondLayer',False):
+	       n1 = K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*self.hls)]
+
+	    xx = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten()	
+	    yy = numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten()
+	    			    
+            print 'X'				    
+            print x
+	    print 'Y'
+	    print y
+	    print 'SS'
+	    print ss
+	    print 'SC'
+	    print sc
+	    print 'A'
+	    print a
+	    print 'N'
+	    print n
+	    
+	    if not __main__.__dict__.get('BalancedLGN',True):
+		print 'RS'
+		print rs
+	    	print 'RC'
+	    	print rc
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+		print 'A1'
+		print a1
+		print self.hls
+		pylab.figure()    
+		pylab.imshow(a1)
+	    
+	    if __main__.__dict__.get('LGNTreshold',False):
+	       print 'LN'	    
+	       print ln
+	    
+	    if __main__.__dict__.get('SecondLayer',False):
+	    	num_neurons_first_layer = int(self.num_neurons*self.hls)  
+	    else:
+		num_neurons_first_layer = self.num_neurons
+            
+	    rfs = numpy.zeros((num_neurons_first_layer,self.kernel_size))		
+	    
+	    for j in xrange(num_neurons_first_layer):
+	    	for i in xrange(0,self.num_lgn):
+		    if  __main__.__dict__.get('BalancedLGN',True):			
+		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi))) 
+		    else:
+			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi)))
+			
+	    return rfs
+
+	def generateBounds(self):
+	      bounds = []
+
+	      for j in xrange(0,self.num_lgn):
+		  bounds.append((6,(numpy.sqrt(self.kernel_size)-6)))
+		  bounds.append((6,(numpy.sqrt(self.kernel_size)-6)))
+		  
+	      for j in xrange(0,self.num_lgn):	
+		  bounds.append((1.0,25))
+		  bounds.append((1.0,25))
+	      if not __main__.__dict__.get('BalancedLGN',True):	
+		  for j in xrange(0,self.num_lgn):	
+			  bounds.append((0.0,1.0))
+			  bounds.append((0.0,1.0))
+		  
+		  
+	      if __main__.__dict__.get('LGNTreshold',False):
+		for j in xrange(0,self.num_lgn):
+		    bounds.append((0,20))
+		  
+
+	      if __main__.__dict__.get('NegativeLgn',True):
+		  minw = -__main__.__dict__.get('MaxW',5000)
+	      else:
+		  minw = 0
+	      maxw = __main__.__dict__.get('MaxW',5000)
+	      print __main__.__dict__.get('MaxW',5000)
+	      
+	      if __main__.__dict__.get('Divisive',False):
+		  d=2
+	      else:
+		  d=1
+
+	      
+	      if __main__.__dict__.get('SecondLayer',False):
+		  for j in xrange(0,self.num_lgn):		
+			  for k in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):
+				  bounds.append((minw,maxw))
+			  
+		  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
+			  for k in xrange(0,self.num_neurons):
+				  bounds.append((-2,2))
+		  if __main__.__dict__.get('Divisive',False):
+			  for j in xrange(0,num_lgn):		
+				  for k in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):
+					  bounds.append((0,maxw))
+				  
+			  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
+				  for k in xrange(0,self.num_neurons):
+					  bounds.append((0,2))
+				  
+	      else:
+		  for i in xrange(0,d):    
+			  for j in xrange(0,num_lgn):		
+				  for k in xrange(0,self.num_neurons):
+					  bounds.append((minw,maxw))
+				  
+			  
+				  
+	      for k in xrange(0,self.num_neurons):
+		  for i in xrange(0,d):
+			  bounds.append((0,20))
+		  
+	      if __main__.__dict__.get('SecondLayer',False):
+		  for i in xrange(0,d):
+			  for k in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):
+				  bounds.append((0,20))
+
+	      return bounds
+
+
 def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,validation_set):
     num_pres,num_neurons = numpy.shape(training_set) 
     
@@ -270,8 +595,11 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
     early_stopping_inputs = training_inputs[-num_pres*0.1:,:]
     training_set = training_set[:-num_pres*0.1,:]
     training_inputs = training_inputs[:-num_pres*0.1,:]
-  
-    lscsm = LSCSM(training_inputs,training_set,lgn_num,num_neurons)
+    
+    if __main__.__dict__.get('LSCSMOLD',True):
+	lscsm = LSCSM(training_inputs,training_set,lgn_num,num_neurons)
+    else:
+        lscsm = LSCSMNEW(training_inputs,training_set,lgn_num,num_neurons)
     func = lscsm.func() 
     der = lscsm.der()
     bounds = lscsm.generateBounds()
@@ -327,7 +655,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
     if __main__.__dict__.get('EarlyStopping',False):
        Ks = best_Ks
 
-    print 'Final training error: ', func(numpy.array(Ks))/ numpy.shape(early_stopping_set)[0] 
+    print 'Final training error: ', func(numpy.array(Ks))/ numpy.shape(training_set)[0] 
     lscsm.X.value = early_stopping_inputs
     lscsm.Y.value = early_stopping_set
     print 'Final testing error: ', func(numpy.array(Ks))/ numpy.shape(early_stopping_set)[0] 
@@ -359,13 +687,6 @@ def runLSCSM():
     size = numpy.sqrt(kernel_size)
 
     raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)
-    
-    to_delete = []
-    #to_delete = [2,3,4,5,6,9,10,11,12,13,14,18,22,26,28,29,30,31,32,34,35,36,37,41,44,50,51,54,55,57,59,60,63,65,67,68,70,71,73,74,76,79,81,82,84,86,87,88,90,91,94,95,97,98,99,100,102]
-    #training_set = numpy.delete(training_set, to_delete, axis = 1)
-    #validation_set = numpy.delete(validation_set, to_delete, axis = 1)
-    #for i in xrange(0,10):
-    #    raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
     
     params={}
     params["LSCSM"]=True
