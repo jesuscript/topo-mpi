@@ -276,17 +276,23 @@ class LSCSMNEW(object):
 	    self.divisive = __main__.__dict__.get('Divisive',False)
 	    self.batch_size=batch_size	    
 
-	    self.xx = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten(),dtype=theano.config.floatX))	
-	    self.yy = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten(),dtype=theano.config.floatX))
+	    #self.xx = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten(),dtype=theano.config.floatX))	
+	    #self.yy = theano.shared(numpy.asarray(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten(),dtype=theano.config.floatX))
+	    self.xx = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).T.flatten())	
+	    self.yy = theano.shared(numpy.repeat([numpy.arange(0,self.size,1)],self.size,axis=0).flatten())
 	    
-	    self.Y = theano.shared(numpy.asarray(YY,dtype=theano.config.floatX))
-    	    self.X = theano.shared(numpy.asarray(XX,dtype=theano.config.floatX))
+	    #self.Y = theano.shared(numpy.asarray(YY,dtype=theano.config.floatX))
+    	    #self.X = theano.shared(numpy.asarray(XX,dtype=theano.config.floatX))
+    	    self.Y = theano.shared(YY)
+    	    self.X = theano.shared(XX)
+
 	    
 	    self.v1of = __main__.__dict__.get('V1OF','Exp')
 	    self.lgnof = __main__.__dict__.get('LGNOF','Exp')
 	    
-	    self.K = T.fvector('K')
-	    self.index = T.lscalar('I')
+	    #self.K = T.fvector('K')
+	    self.K = T.dvector('K')
+	    #self.index = T.lscalar('I')
 	    
 	    #srng = RandomStreams(seed=234)
 	    #self.index = srng.random_integers((1,1),high=self.num_pres-batch_size)[0]
@@ -558,11 +564,11 @@ class LSCSMNEW(object):
 			  
 		  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
 			  for k in xrange(0,self.num_neurons):
-				  bounds.append((-2,2))
+				  bounds.append((-__main__.__dict__.get('MaxWL2',4),__main__.__dict__.get('MaxWL2',4)))
 		  if __main__.__dict__.get('Divisive',False):
-			  for j in xrange(0,num_lgn):		
+			  for j in xrange(0,self.num_lgn):		
 				  for k in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):
-					  bounds.append((0,maxw))
+					  bounds.append((minw,maxw))
 				  
 			  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
 				  for k in xrange(0,self.num_neurons):
@@ -570,7 +576,7 @@ class LSCSMNEW(object):
 				  
 	      else:
 		  for i in xrange(0,d):    
-			  for j in xrange(0,num_lgn):		
+			  for j in xrange(0,self.num_lgn):		
 				  for k in xrange(0,self.num_neurons):
 					  bounds.append((minw,maxw))
 				  
@@ -624,7 +630,14 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
     
     for i in xrange(0,__main__.__dict__.get('NumEpochs',100)):
         print i
+        
+        print 'Before:'
+        print Ks[0:20]
+        
 	(Ks,success,c)=fmin_tnc(func,Ks,fprime=der,bounds=bounds,maxfun = __main__.__dict__.get('EpochSize',1000),messages=0)
+	
+	print 'After:'
+	print Ks[0:20]
 	
 	terr.append(func(numpy.array(Ks))/numpy.shape(training_set)[0])
 	lscsm.X.value = early_stopping_inputs
