@@ -631,13 +631,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
     for i in xrange(0,__main__.__dict__.get('NumEpochs',100)):
         print i
         
-        print 'Before:'
-        print Ks[0:20]
-        
 	(Ks,success,c)=fmin_tnc(func,Ks,fprime=der,bounds=bounds,maxfun = __main__.__dict__.get('EpochSize',1000),messages=0)
-	
-	print 'After:'
-	print Ks[0:20]
 	
 	terr.append(func(numpy.array(Ks))/numpy.shape(training_set)[0])
 	lscsm.X.value = early_stopping_inputs
