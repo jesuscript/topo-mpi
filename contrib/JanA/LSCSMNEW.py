@@ -73,11 +73,11 @@ class LSCSM(object):
 	       self.n1 = self.K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
-		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
 		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
 	    
 	    else:
-		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
 	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
 	    
 	    lgn_output = lgn_output.T
@@ -207,9 +207,9 @@ class LSCSM(object):
 	    for j in xrange(num_neurons_first_layer):
 	    	for i in xrange(0,self.num_lgn):
 		    if  __main__.__dict__.get('BalancedLGN',True):			
-		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi))) 
+		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi)) 
 		    else:
-			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi)))
+			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi))
 			
 	        
 	    return rfs
@@ -349,11 +349,11 @@ class LSCSMNEW(object):
 		       idx +=  int(self.num_neurons*self.hls)
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
-		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
 		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
 	    
 	    else:
-		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ T.sqrt(sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ T.sqrt(ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
 	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
 	    
 	    #lgn_output = theano.printing.Print(message='lgn output:')(lgn_output)
@@ -365,7 +365,8 @@ class LSCSMNEW(object):
             lgn_output = self.construct_of(lgn_output,self.lgnof)
 	       
 	    self.output = T.dot(lgn_output,self.a)
-	    self.d_output = T.dot(lgn_output,self.d)
+	    if self.divisive:
+		self.d_output = T.dot(lgn_output,self.d)
 	    #self.output = theano.printing.Print(message='Output1:')(self.output)
 	    
 	    #self.n = theano.printing.Print(message='N:')(self.n)
@@ -517,9 +518,9 @@ class LSCSMNEW(object):
 	    for j in xrange(num_neurons_first_layer):
 	    	for i in xrange(0,self.num_lgn):
 		    if  __main__.__dict__.get('BalancedLGN',True):			
-		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi))) 
+		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi)) 
 		    else:
-			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/numpy.sqrt((sc[i]*numpy.pi)) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/numpy.sqrt((ss[i]*numpy.pi)))
+			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi))
 			
 	    return rfs
 
@@ -567,7 +568,9 @@ class LSCSMNEW(object):
 				  bounds.append((-__main__.__dict__.get('MaxWL2',4),__main__.__dict__.get('MaxWL2',4)))
 		  if __main__.__dict__.get('Divisive',False):
 			  for j in xrange(0,self.num_lgn):		
-				  for k in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):
+				  for k in xrange(0,int(self.num_neurons*__main__.__dict__.ge 86.4158613107
+24
+t('HiddenLayerSize',1.0))):
 					  bounds.append((minw,maxw))
 				  
 			  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
@@ -648,7 +651,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 	pylab.plot(eserr,'g')	
 	pylab.draw()
 	
-	if best_eserr > eserr[-1]:
+	if best_eserr > eserr[-1]:    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
 	   best_eserr = eserr[-1]
 	   best_Ks = list(Ks)
 	   time_since_best = 0
@@ -656,7 +659,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 	   time_since_best+=1
 	
 	if __main__.__dict__.get('EarlyStopping',False):
-	   if time_since_best > 15:
+	   if time_since_best > 50:
 	      break
 
     if __main__.__dict__.get('EarlyStopping',False):
@@ -734,9 +737,13 @@ def runLSCSM():
     raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)
     
     [K,rpi,glm,rfs]=  fitLSCSM(numpy.mat(training_inputs),numpy.mat(training_set),params["LGN_NUM"],num_neurons,numpy.mat(validation_inputs),numpy.mat(validation_set))
-
+    
+    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
     
     pylab.figure()
+    print num_shape(rfs)
+    print num_neurons
+    print kernel_size
     m = numpy.max(numpy.abs(rfs))
     for i in xrange(0,num_neurons):
 	pylab.subplot(11,11,i+1)    
@@ -760,10 +767,8 @@ def runLSCSM():
     	glm_pred_act = glm.response(training_inputs,K)
     	glm_pred_val_act = glm.response(validation_inputs,K)
     
-    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
     
     signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
-    
     to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
     print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n'
         
@@ -785,7 +790,7 @@ def runLSCSM():
     db_node.add_data("Kernels",K,force=True)
     db_node.add_data("LSCSM",glm,force=True)
 	
-    contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','res.dat')))
+    contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','BestLSCSM.dat')))
     
 
 def loadLSCSMandAnalyse(): 
@@ -794,7 +799,7 @@ def loadLSCSMandAnalyse():
     (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(res)
     raw_validation_set = db_node.data["raw_validation_set"]
     
-    res = contrib.dd.loadResults("LSCSMbasic.dat")
+    res = contrib.dd.loadResults("BestLSCSM.datt")
     
     dataset_node = res.children[0].children[0]
     
@@ -802,8 +807,11 @@ def loadLSCSMandAnalyse():
     validation_set = dataset_node.data["validation_set"]
     training_inputs= dataset_node.data["training_inputs"]
     validation_inputs= dataset_node.data["validation_inputs"]
-    
-    lscsm_new = contrib.JanA.LSCSM.LSCSM1(numpy.mat(training_inputs),numpy.mat(training_set),8,103)
+
+    if __main__.__dict__.get('LSCSMOLD',True):
+	    lscsm_new = contrib.JanA.LSCSM.LSCSM(numpy.mat(training_inputs),numpy.mat(training_set),15,103)
+    else:
+            lscsm_new = contrib.JanA.LSCSMNEW.LSCSM(numpy.mat(training_inputs),numpy.mat(training_set),15,103)
     
     
     K = res.children[0].children[0].children[0].children[0].data["Kernels"]
