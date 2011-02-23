@@ -753,7 +753,7 @@ def runLSCSM():
     print num_neurons
     print kernel_size
     m = numpy.max(numpy.abs(rfs))
-    for i in xrange(0,num_neurons):
+    for i in xrange(0,numpy.shape(rfs)[0]):
 	pylab.subplot(11,11,i+1)    
     	pylab.imshow(numpy.reshape(rfs[i,0:kernel_size],(size,size)),vmin=-m,vmax=m,cmap=pylab.cm.RdBu,interpolation='nearest')
     pylab.savefig(normalize_path('GLM_rfs.png'))
