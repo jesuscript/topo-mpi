@@ -749,7 +749,7 @@ def runLSCSM():
     runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
 
     pylab.figure()
-    print num_shape(rfs)
+    print numpy.shape(rfs)
     print num_neurons
     print kernel_size
     m = numpy.max(numpy.abs(rfs))
