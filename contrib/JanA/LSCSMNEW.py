@@ -568,9 +568,7 @@ class LSCSMNEW(object):
 				  bounds.append((-__main__.__dict__.get('MaxWL2',4),__main__.__dict__.get('MaxWL2',4)))
 		  if __main__.__dict__.get('Divisive',False):
 			  for j in xrange(0,self.num_lgn):		
-				  for k in xrange(0,int(self.num_neurons*__main__.__dict__.ge 86.4158613107
-24
-t('HiddenLayerSize',1.0))):
+				  for k in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):
 					  bounds.append((minw,maxw))
 				  
 			  for j in xrange(0,int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))):		
