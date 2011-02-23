@@ -649,7 +649,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 	pylab.plot(eserr,'g')	
 	pylab.draw()
 	
-	if best_eserr > eserr[-1]:    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
+	if best_eserr > eserr[-1]:    
 	   best_eserr = eserr[-1]
 	   best_Ks = list(Ks)
 	   time_since_best = 0
