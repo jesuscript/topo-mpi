@@ -73,11 +73,11 @@ class LSCSM(object):
 	       self.n1 = self.K[idx+self.num_neurons:idx+self.num_neurons+int(self.num_neurons*__main__.__dict__.get('HiddenLayerSize',1.0))]
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
-		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/sc[i]).T/ (2*sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/ss[i]).T/ (2*ss[i]*numpy.pi)))
 		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
 	    
 	    else:
-		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/ss[i]).T/ (2*ss[i]*numpy.pi)))
 	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
 	    
 	    lgn_output = lgn_output.T
@@ -207,9 +207,9 @@ class LSCSM(object):
 	    for j in xrange(num_neurons_first_layer):
 	    	for i in xrange(0,self.num_lgn):
 		    if  __main__.__dict__.get('BalancedLGN',True):			
-		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi)) 
+		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/sc[i])/(2*sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/ss[i])/(2*ss[i]*numpy.pi)) 
 		    else:
-			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi))
+			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/sc[i])/(2*sc[i]*numpy.pi) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/ss[i])/(2*ss[i]*numpy.pi))
 			
 	        
 	    return rfs
@@ -349,11 +349,11 @@ class LSCSMNEW(object):
 		       idx +=  int(self.num_neurons*self.hls)
 	    
 	    if __main__.__dict__.get('BalancedLGN',True):
-		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss: T.dot(self.X,(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/sc[i]).T/ (2*sc[i]*numpy.pi)) - (T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/ss[i]).T/ (2*ss[i]*numpy.pi)))
 		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
 	    
 	    else:
-		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/ss[i]).T/ (2*ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)//2ss[i]).T/ (2*ss[i]*numpy.pi)))
 	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
 	    
 	    #lgn_output = theano.printing.Print(message='lgn output:')(lgn_output)
@@ -518,9 +518,9 @@ class LSCSMNEW(object):
 	    for j in xrange(num_neurons_first_layer):
 	    	for i in xrange(0,self.num_lgn):
 		    if  __main__.__dict__.get('BalancedLGN',True):			
-		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi)) 
+		    	rfs[j,:] += a[i,j]*(numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/sc[i])/(2*sc[i]*numpy.pi) - numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/ss[i])/(2*ss[i]*numpy.pi)) 
 		    else:
-			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/sc[i])/(2*sc[i]*numpy.pi) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/ss[i])/(2*ss[i]*numpy.pi))
+			rfs[j,:] += a[i,j]*(rc[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/sc[i])/(2*sc[i]*numpy.pi) - rs[i]*numpy.exp(-((xx - x[i])**2 + (yy - y[i])**2)/2/ss[i])/(2*ss[i]*numpy.pi))
 			
 	    return rfs
 
