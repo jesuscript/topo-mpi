@@ -736,8 +736,18 @@ def runLSCSM():
     
     [K,rpi,glm,rfs]=  fitLSCSM(numpy.mat(training_inputs),numpy.mat(training_set),params["LGN_NUM"],num_neurons,numpy.mat(validation_inputs),numpy.mat(validation_set))
     
-    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
+    rpi_pred_act = training_inputs * rpi
+    rpi_pred_val_act = validation_inputs * rpi
     
+    if __main__.__dict__.get('Sequential',False):
+	glm_pred_act = numpy.hstack([glm[i].response(training_inputs,K[i]) for i in xrange(0,num_neurons)])
+	glm_pred_val_act = numpy.hstack([glm[i].response(validation_inputs,K[i]) for i in xrange(0,num_neurons)])
+    else:
+    	glm_pred_act = glm.response(training_inputs,K)
+    	glm_pred_val_act = glm.response(validation_inputs,K)
+
+    runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set)
+
     pylab.figure()
     print num_shape(rfs)
     print num_neurons
@@ -754,18 +764,8 @@ def runLSCSM():
 	pylab.subplot(11,11,i+1)
     	pylab.imshow(numpy.reshape(rpi[:,i],(size,size)),vmin=-m,vmax=m,cmap=pylab.cm.RdBu,interpolation='nearest')
     pylab.savefig(normalize_path('RPI_rfs.png'))
-    
-    rpi_pred_act = training_inputs * rpi
-    rpi_pred_val_act = validation_inputs * rpi
-    
-    if __main__.__dict__.get('Sequential',False):
-	glm_pred_act = numpy.hstack([glm[i].response(training_inputs,K[i]) for i in xrange(0,num_neurons)])
-	glm_pred_val_act = numpy.hstack([glm[i].response(validation_inputs,K[i]) for i in xrange(0,num_neurons)])
-    else:
-    	glm_pred_act = glm.response(training_inputs,K)
-    	glm_pred_val_act = glm.response(validation_inputs,K)
-    
-    
+
+
     signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(training_set), numpy.array(validation_set), glm_pred_act, glm_pred_val_act)
     to_delete = numpy.array(numpy.nonzero((numpy.array(normalized_noise_power) > 85) * 1.0))[0]
     print 'After deleting ' , len(to_delete) , 'most noisy neurons (<15% signal to noise ratio)\n\n\n'
