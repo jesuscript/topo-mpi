@@ -353,7 +353,7 @@ class LSCSMNEW(object):
 		lgn_output,updates = theano.scan(lgn_kernel , sequences= T.arange(self.num_lgn), non_sequences=[self.x,self.y,self.sc,self.ss])
 	    
 	    else:
-		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)//2ss[i]).T/ (2*ss[i]*numpy.pi)))
+		lgn_kernel = lambda i,x,y,sc,ss,rc,rs: T.dot(self.X,rc[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/sc[i]).T/ (2*sc[i]*numpy.pi)) - rs[i]*(T.exp(-((self.xx - x[i])**2 + (self.yy - y[i])**2)/2/ss[i]).T/ (2*ss[i]*numpy.pi)))
 	        lgn_output,updates = theano.scan(lgn_kernel,sequences=T.arange(self.num_lgn),non_sequences=[self.x,self.y,self.sc,self.ss,self.rc,self.rs])
 	    
 	    #lgn_output = theano.printing.Print(message='lgn output:')(lgn_output)
