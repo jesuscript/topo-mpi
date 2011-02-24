@@ -598,10 +598,15 @@ class LSCSMNEW(object):
 def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,validation_set):
     num_pres,num_neurons = numpy.shape(training_set) 
     
-    early_stopping_set = training_set[-num_pres*0.1:,:]
-    early_stopping_inputs = training_inputs[-num_pres*0.1:,:]
-    training_set = training_set[:-num_pres*0.1,:]
-    training_inputs = training_inputs[:-num_pres*0.1,:]
+    if __main__.__dict__.get('EarlyStopping',False):
+       frac=0.1
+    else
+       frac=0.01
+    
+    early_stopping_set = training_set[-num_pres*frac:,:]
+    early_stopping_inputs = training_inputs[-num_pres*frac:,:]
+    training_set = training_set[:-num_pres*frac,:]
+    training_inputs = training_inputs[:-num_pres*frac,:]
     
     if __main__.__dict__.get('LSCSMOLD',True):
 	lscsm = LSCSM(training_inputs,training_set,lgn_num,num_neurons)
