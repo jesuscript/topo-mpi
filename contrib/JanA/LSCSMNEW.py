@@ -603,7 +603,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
     
     if __main__.__dict__.get('EarlyStopping',False):
        frac=0.1
-    else
+    else:
        frac=0.01
     
     early_stopping_set = training_set[-num_pres*frac:,:]
