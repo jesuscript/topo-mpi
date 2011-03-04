@@ -20,10 +20,10 @@ from topo.base.arrayutil import clip_lower
 from topo.sheet.lissom import LISSOM
 from topo.sheet.optimized import NeighborhoodMask_Opt, LISSOM_Opt
 from topo.plotting.plotfilesaver import * 
-from topo.command.pylabplots import cyclic_tuning_curve, matrixplot
+from topo.command.pylabplot import cyclic_tuning_curve, matrixplot
 from topo.command.analysis import save_plotgroup
 from param import normalize_path
-from topo.command.pylabplots import plot_tracked_attributes
+from topo.command.pylabplot import plot_tracked_attributes
 from topo.base.functionfamily import CoordinateMapperFn
 from topo.plotting.bitmap import MontageBitmap
 from topo.base.patterngenerator import PatternGenerator, Constant 
@@ -530,8 +530,9 @@ def run_dynamics_analysis(x,y,cs,scale):
     (xx,yy) = topo.sim["V1Complex"].sheet2matrixidx(x,y)
     
     orr=numpy.pi*topo.sim["V1Complex"].sheet_views["OrientationPreference"].view()[0][xx][yy]
+    phase = 2*numpy.pi*topo.sim["V1Complex"].sheet_views["PhasePreference"].view()[0][xx][yy]
     
-    pg = OrientationContrast(orientationcenter=orr,orientationsurround=orr,sizecenter=cs,sizesurround=2.0,thickness=2.0-cs-0.2,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
+    pg = OrientationContrast(orientationcenter=orr,orientationsurround=orr,sizecenter=cs,sizesurround=2.0,thickness=2.0-cs-0.2,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4),phase=phase)
     plot_neural_dynamics(["V1Complex","V1ComplexInh"],[("V1Complex",(x,y)),("V1ComplexInh",(x,y))],pg,"colinear")
     
     pg = OrientationContrast(orientationcenter=orr,orientationsurround=orr+numpy.pi/2,sizecenter=cs,sizesurround=2.0,thickness=2.0-cs-0.2,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
@@ -550,9 +551,9 @@ def test(x,y,cs,scale):
     
     orr=numpy.pi*topo.sim["V1Complex"].sheet_views["OrientationPreference"].view()[0][xx][yy]
     
-    pg1 = OrientationContrast(orientationcenter=orr,orientationsurround=orr,sizecenter=cs,sizesurround=2.0,thickness=2.0-cs,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
+    pg1 = OrientationContrast(orientationcenter=orr,orientationsurround=orr,sizecenter=cs,sizesurround=3.0,thickness=3.0-cs,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
 
-    pg2 = OrientationContrast(orientationcenter=orr,orientationsurround=orr+numpy.pi/2,sizecenter=cs,sizesurround=2.0,thickness=2.0-cs,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
+    pg2 = OrientationContrast(orientationcenter=orr,orientationsurround=orr+numpy.pi/2,sizecenter=cs,sizesurround=3.0,thickness=3.0-cs,scalecenter=scale,scalesurround=scale,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
 
     pp = PatternPresenter(pattern_generator=pg1,duration=4.0,contrast_parameter="weber_contrast")
         
@@ -620,7 +621,7 @@ class SineGratingDiskTemp(SineGrating):
       mask_shape = param.Parameter(default=Disk(smoothing=0,size=1.0))
 		
 		
-def size_tining_activity_evolution(x,y,cs,scale):
+def size_tuning_activity_evolution(x,y,cs,scale):
     from topo.pattern.basic import OrientationContrast
     from topo.command.basic import pattern_present
     from topo.base.functionfamily import PatternDrivenAnalysis
@@ -702,5 +703,76 @@ def size_tining_activity_evolution(x,y,cs,scale):
     pylab.colorbar(shrink=0.4)
     
     
+def size_tuning_analysis(x,y,scale):
+    from topo.pattern.basic import OrientationContrast
+    from topo.command.basic import pattern_present
+    from topo.base.functionfamily import PatternDrivenAnalysis
+    from topo.pattern.basic import OrientationContrast
+    from topo.analysis.featureresponses import PatternPresenter
+    from topo.base.sheet import Sheet
+  
+    (xx,yy) = topo.sim["V1Complex"].sheet2matrixidx(x,y)
+    
+    orr= numpy.pi*topo.sim["V1Complex"].sheet_views["OrientationPreference"].view()[0][xx][yy]
+    phase = 2*numpy.pi*topo.sim["V1Complex"].sheet_views["PhasePreference"].view()[0][xx][yy]
+    
+    activities_s = []
+    activities_c = []
+    activities_ci = []
+    
+    for i in xrange(0,40):
+	pg = SineGratingDiskTemp(orientation=orr,phase=phase,size=(12.0/float(i+1)),scale=1.0,x=x,y=y,frequency=__main__.__dict__.get('FREQ',2.4))
 	
-				
+	pp = PatternPresenter(pattern_generator=pg,duration=4.0,contrast_parameter="weber_contrast")
+	    
+	for f in PatternDrivenAnalysis.pre_analysis_session_hooks: f()
+	topo.sim.state_push()
+	for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
+
+	pp({},{})
+	topo.guimain.refresh_activity_windows()
+	
+	activities_c.append(topo.sim["V1Complex"].activity.copy())
+	activities_ci.append(topo.sim["V1ComplexInh"].activity.copy())
+	activities_s.append(topo.sim["V1Simple"].activity.copy())
+
+	for f in PatternDrivenAnalysis.post_presentation_hooks: f()
+	topo.sim.state_pop()
+	for f in PatternDrivenAnalysis.post_analysis_session_hooks: f()
+    
+    
+    a = []if __main__.__dict__.get('EarlyStopping',False):
+    b = []
+    c = []
+
+    pylab.figure()
+    pylab.subplot(6,6,1)
+    for i in xrange(0,40):	
+	pylab.subplot(7,7,i+1)
+        pylab.imshow(activities_c[i],vmin=0.0,vmax=2.0,interpolation='nearest')
+        pylab.xticks([], [])
+	pylab.yticks([], [])
+	pylab.xlabel(str(12.0-i*0.3),fontsize=8)
+	#pylab.colorbar(shrink=0.1)
+	a.append(activities_c[i][xx][yy])
+	c.append(activities_ci[i][xx][yy])
+	b.append(12.0-i*0.3)
+
+    pylab.figure()
+    pylab.subplot(6,6,1)
+    for i in xrange(0,40):	
+	pylab.subplot(7,7,i+1)
+        pylab.imshow(activities_s[i],vmin=0.0,vmax=2.0,interpolation='nearest')
+        pylab.xticks([], [])
+	pylab.yticks([], [])
+	pylab.xlabel(str(12.0-i*0.3),fontsize=8)
+
+	
+    pylab.figure()
+    pylab.plot(b,a)
+    
+    release_fig("STC_settling_complex_exc.png")	
+    
+    pylab.figure()
+    pylab.plot(b,c)
+    release_fig("STC_settling_complex_inh.png")	
