@@ -16,7 +16,7 @@ import contrib.dd
 import contrib.JanA.dataimport
 from contrib.JanA.regression import laplaceBias
 from pyevolve import *
-from contrib.JanA.visualization import printCorrelationAnalysis
+from contrib.JanA.visualization import printCorrelationAnalysis, showRFS
 
 pylab.show=lambda:1; 
 pylab.interactive(True)
@@ -665,7 +665,7 @@ def fitLSCSM(training_inputs,training_set,lgn_num,num_neurons,validation_inputs,
 	   time_since_best+=1
 	
 	if __main__.__dict__.get('EarlyStopping',False):
-	   if time_since_best > 50:
+	   if time_since_best > 30:
 	      break
 
     if __main__.__dict__.get('EarlyStopping',False):
@@ -789,50 +789,368 @@ def runLSCSM():
 	
 	for i in xrange(0,len(raw_validation_set)):
 		raw_validation_set[i] = numpy.delete(raw_validation_set[i], to_delete, axis = 1)
-	
+
 	raw_validation_data_set=numpy.rollaxis(numpy.array(raw_validation_set),2)	
 	runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons-len(to_delete),raw_validation_data_set)
 	
     db_node.add_data("Kernels",K,force=True)
     db_node.add_data("LSCSM",glm,force=True)
-	
+    
     contrib.dd.saveResults(res,normalize_path(__main__.__dict__.get('save_name','BestLSCSM.dat')))
     
 
+def addRPI():
+  
+    res = contrib.dd.DB(None)
+    
+    animals = ['2009_11_04_region3numpy.reshape(rfs[i,0:kernel_size],(size,size)).dat','2009_11_04_region5.dat','2010_04_22.dat']
+    animal_names = ['2009_11_04_region3','2009_11_04_region5','2010_04_22']
+    
+    i=0
+    for a in animals:
+      __main__.__dict__['dataset']=animal_names[i]
+      (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(res)
+      raw_validation_set = db_node.data["raw_validation_set"]
+      
+      res = contrib.dd.loadResults(a)
+      dataset_node = res.children[0].children[0]
+      dataset_node.add_data("raw_validation_set",raw_validation_set,force=True)
+
+      kernel_size =  numpy.shape(numpy.mat(training_inputs))[1]
+      laplace = laplaceBias(numpy.sqrt(kernel_size),numpy.sqrt(kernel_size))
+      rpi = numpy.linalg.pinv(numpy.mat(training_inputs).T*numpy.mat(training_inputs) + __main__.__dict__.get('RPILaplaceBias',0.0001)*laplace) * numpy.mat(training_inputs).T * numpy.mat(training_set)
+      
+      params={}
+      params["STA"]=True
+      dataset_node = dataset_node.get_child(params)
+      
+      params={}
+      params["RPILaplaceBias"]=__main__.__dict__.get('RPILaplaceBias',0.0001)
+      dataset_node = dataset_node.get_child(params)
+      
+      dataset_node.add_data("RPI",rpi,force=True)
+      
+      contrib.dd.saveResults(res,normalize_path(a))
+      
+      i=i+1
+  
 def loadLSCSMandAnalyse(): 
     
     res = contrib.dd.DB(None)
-    (sizex,sizey,training_inputs,training_set,validation_inputs,validation_set,ff,db_node) = contrib.JanA.dataimport.sortOutLoading(res)
-    raw_validation_set = db_node.data["raw_validation_set"]
+    gallant_tr_names = ['region1_training_resp.txt','region2_training_resp.txt','region3_training_resp.txt']
+    gallant_vr_names = ['region1_validation_resp.txt','region2_validation_resp.txt','region3_validation_resp.txt']
+    animals = ['2009_11_04_region3.dat','2009_11_04_region5.dat','2010_04_22.dat']
+    animal_names = ['2009_11_04_region3','2009_11_04_region5','2010_04_22']
     
-    res = contrib.dd.loadResults("BestLSCSM.datt")
     
-    dataset_node = res.children[0].children[0]
+    pred_act = []
+    pred_val_act = []
+    ts = []
+    rvs = []
+    vs = []
+    ti = []
+    vi = []
     
-    training_set = dataset_node.data["training_set"]
-    validation_set = dataset_node.data["validation_set"]
-    training_inputs= dataset_node.data["training_inputs"]
-    validation_inputs= dataset_node.data["validation_inputs"]
+    
+    
+    gallant_pred_val_act = []
+    gallant_pred_act = []
+    for i in xrange(0,len(animals)):
+        gallant_pred_val_act.append(numpy.loadtxt('./LSCSM/Gallant/'+gallant_vr_names[i]))
+        gallant_pred_act.append(numpy.loadtxt('./LSCSM/Gallant/'+gallant_tr_names[i]))
+    
+    i=0
+    for a in animals:
+      res = contrib.dd.loadResults(a)
+      
+      dataset_node = res.children[0].children[0]
+      
+      training_set = dataset_node.data["training_set"]
 
-    if __main__.__dict__.get('LSCSMOLD',True):
-	    lscsm_new = contrib.JanA.LSCSM.LSCSM(numpy.mat(training_inputs),numpy.mat(training_set),15,103)
-    else:
-            lscsm_new = contrib.JanA.LSCSMNEW.LSCSM(numpy.mat(training_inputs),numpy.mat(training_set),15,103)
+      validation_set = dataset_node.data["validation_set"]
+      raw_validation_set = dataset_node.data["raw_validation_set"]
+      training_inputs= dataset_node.data["training_inputs"]
+      validation_inputs= dataset_node.data["validation_inputs"]
+      
+      ts.append(numpy.mat(training_set))
+      vs.append(numpy.mat(validation_set))
+      rvs.append(raw_validation_set)
+      ti.append(numpy.mat(training_inputs))
+      vi.append(numpy.mat(validation_inputs))
+      
+      if __main__.__dict__.get('LSCSMOLD',True):
+	      lscsm_new = contrib.JanA.LSCSMNEW.LSCSMNEW(numpy.mat(training_inputs),numpy.mat(training_set),15,103)
+      else:
+	      lscsm_new = contrib.JanA.LSCSMNEW.LSCSM(numpy.mat(training_inputs),numpy.mat(training_set),15,103)
+      
+      
+      K = res.children[0].children[0].children[0].children[0].data["Kernels"]
+      lscsm = res.children[0].children[0].children[0].children[0].data["LSCSM"]
+      #rfs  = lscsm_new.returnRFs(K)
+	  
+      pred_act.append(lscsm.response(training_inputs,K))
+      pred_val_act.append(lscsm.response(validation_inputs,K))
+      i=i+1
+    
+    # load rpi
+    rpi = []
+    for i in xrange(0,len(animals)):
+        rpi.append(numpy.loadtxt(animal_names[i]+'STA.txt'))
     
     
+    
+     
+    corrs = [] 
+    gallant_corrs = []
+    for i in xrange(0,len(animals)):
+      ofs = run_nonlinearity_detection(numpy.mat(ts[i]),numpy.mat(gallant_pred_act[i]),num_bins=30,display=False)
+      gallant_pred_act[i] = apply_output_function(numpy.mat(gallant_pred_act[i]),ofs)
+      gallant_pred_val_act[i] = apply_output_function(numpy.mat(gallant_pred_val_act[i]),ofs)
+      
+      
+      print 'Correlations for' , animals[i]
+      train_c,val_c = printCorrelationAnalysis(ts[i],vs[i],pred_act[i],pred_val_act[i])
+      corrs.append(numpy.array(val_c))
+      train_c,val_c = printCorrelationAnalysis(vs[i],vs[i],gallant_pred_val_act[i],gallant_pred_val_act[i])
+      gallant_corrs.append(numpy.array(val_c))
+
+    #check out STA
+    corrs_rpi = []
+    rpi_pred_act = []
+    rpi_pred_val_act = []
+    for i in xrange(0,len(animals)):
+      rpa = numpy.mat(ti[i] * rpi[i])
+      rpva = numpy.mat(vi[i] * rpi[i])
+      ofs = run_nonlinearity_detection(numpy.mat(ts[i]),numpy.mat(rpa),num_bins=30,display=False)
+      rpi_pred_act_t = apply_output_function(numpy.mat(rpa),ofs)
+      rpi_pred_val_act_t = apply_output_function(numpy.mat(rpva),ofs)
+      
+      rpi_pred_act.append(rpi_pred_act_t)
+      rpi_pred_val_act.append(rpi_pred_val_act_t)
+
+      train_c,val_c = printCorrelationAnalysis(ts[i],vs[i],rpi_pred_act[-1],rpi_pred_val_act[-1])
+      corrs_rpi.append(numpy.array(val_c))
+
+    # generate signal/noise data
+    snr=[]
+    for i in xrange(0,len(animals)):
+       raw_validation_data_set=numpy.rollaxis(numpy.array(rvs[i]),2)
+       signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(ts[i]), numpy.array(vs[i]), pred_act[i], pred_val_act[i])
+       snr.append(normalized_noise_power)
+      
+    from matplotlib.gridspec import GridSpec
+
+    
+    best = numpy.argmax(corrs[0])
+    median = numpy.argmin(abs(corrs[0]-numpy.median(corrs[0])))
+    
+    f = pylab.figure(dpi=100,facecolor='w',figsize=(14,12))
+    f.text(0.5,0.96,'Best neuron. R='+("%.2f" % (corrs[0][best])),horizontalalignment='center',fontsize=16)
+    f.text(0.5,0.685,'Median neuron. R='+("%.2f" % (corrs[0][median])),horizontalalignment='center',fontsize=16)
+
+    gs = GridSpec(7,6)
+    gs.update(wspace=1.0,hspace=2.0,left=0.05,right=0.95,bottom=0.05,top=0.95)
+
+    pylab.subplot(gs[:2,:4])
+    #pylab.title('Best neuron. R='+str(corrs[0][best]))
+    pylab.plot(vs[0][:,best],'k',label='experiment')
+    pylab.plot(pred_val_act[0][:,best],'k--',label='model')
+    pylab.ylabel('response')
+    pylab.legend(loc='upper left')
+    
+    pylab.subplot(gs[:2,4:])
+    pylab.plot(vs[0][:,best],pred_val_act[0][:,best],'wo')
+    pylab.xlabel("measured response")
+    pylab.ylabel('predicted response')
+    
+
+    pylab.subplot(gs[2:4,:4])
+    #pylab.title('Median neuron. R='+str(corrs[0][median]))
+    pylab.plot(vs[0][:,median],'k',label='experiment')
+    pylab.plot(pred_val_act[0][:,median],'k--',label='model')
+    pylab.ylabel('response')
+    pylab.xlabel("image #")
+
+    pylab.subplot(gs[2:4,4:])
+    pylab.plot(vs[0][:,median],pred_val_act[0][:,median],'wo')
+    pylab.xlabel("measured response")
+    pylab.ylabel('predicted response')
+    
+
+    pylab.subplot(gs[4:,:3])
+    bins = numpy.arange(0,1.0,0.1)
+    n, bins, patches = pylab.hist(corrs, bins,histtype='bar',label = ['Region1','Region2','Region3'])
+    pylab.legend(loc='upper left')
+    pylab.xlabel('R')
+    pylab.ylabel('# neurons')
+    pylab.ylim(0,27)
+
+    ax = pylab.subplot(gs[4:,3:])
+    pylab.plot(1/(1/(1-numpy.array(snr[0])/100)-1),corrs[0],'ro',label='region1')
+    pylab.plot(1/(1/(1-numpy.array(snr[1])/100)-1),corrs[1],'go',label='region2')
+    pylab.plot(1/(1/(1-numpy.array(snr[2])/100)-1),corrs[2],'bo',label='region3')
+    #pylab.legend()
+    pylab.xlabel('SNR')
+    pylab.ylabel('R')
+    pylab.xlim(-0.05,3.0)  
+    pylab.savefig('/home/jan/Doc/CSNG/antolik/LSCSMPaper/fig/lscsm_predictions.png')
+
     K = res.children[0].children[0].children[0].children[0].data["Kernels"]
-    lscsm = res.children[0].children[0].children[0].children[0].data["LSCSM"]
-    rfs  = lscsm_new.returnRFs(K)
-    	
-    pred_act = lscsm.response(training_inputs,K)
-    pred_val_act = lscsm.response(validation_inputs,K)
-   
-    sizex=numpy.sqrt(numpy.shape(training_inputs)[1])
-    from contrib.JanA.visualization import compareModelPerformanceWithRPI  
+    f = pylab.figure(dpi=100,facecolor='w',figsize=(14,12))
+    gs = GridSpec(2,2)
+    gs.update(wspace=0.1,hspace=0.2,left=0.1,right=0.95,bottom=0.1,top=0.95)
+
+    from numpy import mean
+    #raw correlations
+    ax = pylab.subplot(gs[0,:])
+    width = 0.25
+    means = [mean([mean(z) for z in corrs_rpi]),mean([mean(z) for z in gallant_corrs]),mean([mean(z) for z in corrs])]
+    region3 = [mean(corrs_rpi[0]),mean(gallant_corrs[0]),mean(corrs[0])]
+    region5 = [mean(corrs_rpi[1]),mean(gallant_corrs[1]),mean(corrs[1])]
+    region2010 = [mean(corrs_rpi[2]),mean(gallant_corrs[2]),mean(corrs[2])]
     
-    compareModelPerformanceWithRPI(numpy.mat(training_set),numpy.mat(validation_set),numpy.mat(training_inputs),numpy.mat(validation_inputs),numpy.mat(pred_act),numpy.mat(pred_val_act),numpy.array(raw_validation_set),sizex,sizex,modelname='Model')
-   	
+    print region3
+    print region5
+    print region2010
+    
+    loc = numpy.array([1-width,1,1+width] )
+    b1= pylab.bar(loc-(width-0.05)/2, means, width-0.05, color='gray')
+    pylab.plot(loc,region3,'o',color='r')
+    pylab.plot(loc,region5,'o',color='g')
+    pylab.plot(loc,region2010,'o',color='b')
+    p1=pylab.plot(loc,region3,'-',color='r')
+    p2=pylab.plot(loc,region5,'-',color='g')
+    p3=pylab.plot(loc,region2010,'-',color='b')
+    ax.legend( (p1[0], p2[0],p3[0]), ('Region 1','Region 2','Region 3'),loc='upper left' )
+    pylab.ylabel('R or FEV')
+    ticks=loc
+    
+    #correlations of good neurons
+    for i in xrange(0,len(animals)):
+        #to_delete = numpy.array(numpy.nonzero((numpy.array(1/(1/(1-numpy.array(snr[i])/100)-1)) < 0.25) * 1.0))[0]
+        to_delete = numpy.array(numpy.nonzero((numpy.array(snr[i]) > 75) * 1.0))[0]
+	print 'After deleting ' , len(to_delete) , 'most noisy neurons (<30% signal to noise ratio)\n\n\n'
+	corrs[i] =  numpy.delete(corrs[i], to_delete)
+	corrs_rpi[i] =  numpy.delete(corrs_rpi[i], to_delete)
+	gallant_corrs[i] =  numpy.delete(gallant_corrs[i], to_delete)
 	
+	ts[i] = numpy.delete(ts[i], to_delete, axis = 1)
+	vs[i] = numpy.delete(vs[i], to_delete, axis = 1)
+	pred_act[i] = numpy.delete(pred_act[i], to_delete, axis = 1)
+	pred_val_act[i] = numpy.delete(pred_val_act[i], to_delete, axis = 1)
+	rpi_pred_act[i] = numpy.delete(rpi_pred_act[i], to_delete, axis = 1)
+	rpi_pred_val_act[i] = numpy.delete(rpi_pred_val_act[i], to_delete, axis = 1)
+	gallant_pred_val_act[i] = numpy.delete(gallant_pred_val_act[i], to_delete, axis = 1)
+        for j in xrange(0,len(rvs[i])):
+		rvs[i][j] = numpy.delete(rvs[i][j], to_delete, axis = 1)
+
+
+
+    means = [mean([mean(z) for z in corrs_rpi]),mean([mean(z) for z in gallant_corrs]),mean([mean(z) for z in corrs])]
+    region3 = [mean(corrs_rpi[0]),mean(gallant_corrs[0]),mean(corrs[0])]
+    region5 = [mean(corrs_rpi[1]),mean(gallant_corrs[1]),mean(corrs[1])]
+    region2010 = [mean(corrs_rpi[2]),mean(gallant_corrs[2]),mean(corrs[2])]
+
+    loc = numpy.array([2-width,2,2+width] )
+    b1= pylab.bar(loc-(width-0.05)/2, means, width-0.05, color='gray')
+    pylab.plot(loc,region3,'o',color='r')
+    pylab.plot(loc,region5,'o',color='g')
+    pylab.plot(loc,region2010,'o',color='b')
+    p1=pylab.plot(loc,region3,'-',color='r')
+    p2=pylab.plot(loc,region5,'-',color='g')
+    p3=pylab.plot(loc,region2010,'-',color='b')
+    pylab.ylabel('Correlation coefficient')
+    ticks = numpy.concatenate((ticks,loc))
+
+    efv=[]
+    rpi_efv=[]
+    gallant_efv=[]
+    for i in xrange(0,len(animals)):
+       raw_validation_data_set=numpy.rollaxis(numpy.array(rvs[i]),2)
+       
+       print numpy.shape(pred_act[i])
+       print numpy.shape(pred_val_act[i])
+       print numpy.shape(rpi_pred_act[i])
+       print numpy.shape(rpi_pred_val_act[i])
+       
+       signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(ts[i]), numpy.array(vs[i]), pred_act[i], pred_val_act[i])
+       efv.append(validation_prediction_power)
+       signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(ts[i]), numpy.array(vs[i]), numpy.array(rpi_pred_act[i]), numpy.array(rpi_pred_val_act[i]))
+       rpi_efv.append(validation_prediction_power)
+       signal_power,noise_power,normalized_noise_power,training_prediction_power,validation_prediction_power,signal_power_variance = signal_power_test(raw_validation_data_set, numpy.array(vs[i]), numpy.array(vs[i]), numpy.array(gallant_pred_val_act[i]), numpy.array(gallant_pred_val_act[i]))
+       gallant_efv.append(validation_prediction_power)
+
+    means = [mean([mean(z) for z in rpi_efv]),mean([mean(z) for z in gallant_efv]),mean([mean(z) for z in efv])]
+    region3 = [mean(rpi_efv[0]),mean(gallant_efv[0]),mean(efv[0])]
+    region5 = [mean(rpi_efv[1]),mean(gallant_efv[1]),mean(efv[1])]
+    region2010 = [mean(rpi_efv[2]),mean(gallant_efv[2]),mean(efv[2])]
+
+    loc = numpy.array([3-width,3,3+width] )
+    b1= pylab.bar(loc-(width-0.05)/2, means, width-0.05, color='gray')
+    pylab.plot(loc,region3,'o',color='r')
+    pylab.plot(loc,region5,'o',color='g')
+    pylab.plot(loc,region2010,'o',color='b')
+    p1=pylab.plot(loc,region3,'-',color='r')
+    p2=pylab.plot(loc,region5,'-',color='g')
+    p3=pylab.plot(loc,region2010,'-',color='b')
+    pylab.ylabel('Correlation coefficient')
+    ticks = numpy.concatenate((ticks,loc))
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(('STA','BWT','LSCSM','STA','BWT','LSCSM','STA','BWT','LSCSM'))
+
+    ax = pylab.subplot(gs[1,0])
+    pylab.plot(rpi_efv[0],efv[0],'ro',label='region1')
+    pylab.plot(rpi_efv[1],efv[1],'go',label='region2')
+    pylab.plot(rpi_efv[2],efv[2],'bo',label='region3')
+    pylab.plot([-0.4,1.0],[-0.6,1.0],'k')
+    #pylab.xlim(-0.4,1.0)
+    #pylab.ylim(-0.6,1.0)
+    pylab.xlabel('FEV STA')
+    pylab.ylabel('FEV LSCSM')
+    #pylab.legend(loc='upper left')
+
+    ax = pylab.subplot(gs[1,1])
+    pylab.plot(gallant_efv[0],efv[0],'ro',label='region1')
+    pylab.plot(gallant_efv[1],efv[1],'go',label='region2')
+    pylab.plot(gallant_efv[2],efv[2],'bo',label='region3')
+    pylab.plot([-0.4,1.0],[-0.6,1.0],'k')
+    #pylab.xlim(-0.4,1.0)
+    #pylab.ylim(-0.6,1.0)
+    pylab.xlabel('FEV BWT')
+
+    pylab.savefig('/home/jan/Doc/CSNG/antolik/LSCSMPaper/fig/lscsm_comparison.png')
+
+
+def AnalyzeRF():
+    res = contrib.dd.DB(None)
+    animals = ['2009_11_04_region3.dat','2009_11_04_region5.dat','2010_04_22.dat']
+    animal_names = ['2009_11_04_region3','2009_11_04_region5','2010_04_22']
+    
+    i=0
+    for a in animals:
+      res = contrib.dd.loadResults(a)
+      
+      dataset_node = res.children[0].children[0]
+      
+      training_set = dataset_node.data["training_set"]
+      training_inputs= dataset_node.data["training_inputs"]
+      
+      num_pres,num_neurons = numpy.shape(training_set)
+      num_pres,size = numpy.shape(training_inputs)
+      size = numpy.sqrt(size)
+      
+      if __main__.__dict__.get('LSCSMOLD',True):
+	      lscsm_new = contrib.JanA.LSCSMNEW.LSCSMNEW(numpy.mat(training_inputs),numpy.mat(training_set),15,num_neurons)
+      else:
+	      lscsm_new = contrib.JanA.LSCSMNEW.LSCSM(numpy.mat(training_inputs),numpy.mat(training_set),15,num_neurons)
+      
+      lscsm = res.children[0].children[0].children[0].children[0].data["LSCSM"]
+      K = res.children[0].children[0].children[0].children[0].data["Kernels"]
+      rfs  = lscsm_new.returnRFs(K)
+      rfs = numpy.reshape(rfs,(num_neurons,size,size))
+      showRFS(numpy.array(rfs),cog=False,centers=None,joinnormalize=False,axis=False)
+	  
+    
     
 def runLSCSMAnalysis(rpi_pred_act,rpi_pred_val_act,glm_pred_act,glm_pred_val_act,training_set,validation_set,num_neurons,raw_validation_data_set):
     
