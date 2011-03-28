@@ -17,7 +17,8 @@ import topo.pattern.random
 import __main__
 import os
 import contrib
-from topo.sheet.lissom import LISSOM, JointNormalizingCFSheet_Continuous
+from topo.sheet.basic import  JointNormalizingCFSheet_Continuous
+from topo.sheet.lissom import LISSOM
 from topo.sheet.optimized import NeighborhoodMask_Opt, LISSOM_Opt
 from topo.sheet.basic import GeneratorSheet
 from topo.projection.basic import CFProjection, SharedWeightCFProjection,OneToOneProjection
@@ -35,7 +36,7 @@ from topo.pattern.basic import Gaussian
 from topo.learningfn.projfn import CFPLF_Trace
 from topo.base.functionfamily import CoordinateMapperFn
 from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Translator,SimpleHomeoSigmoid, Jitterer, AddGC, SimpleHomeoLinear, Expander
-from topo.misc.numbergenerator import UniformRandom, BoundedNumber, ExponentialDecay
+from topo.numbergen import UniformRandom, BoundedNumber, ExponentialDecay
 
 
 topo.sim.name = "CCSimple"
@@ -208,11 +209,11 @@ if False:
                         weights_generator=off_weights)
 else:
     topo.sim.connect('FakeRetina','LGNOn',delay=0.05,
-                     connection_type=OneToOneProjection,strength=locals().get('RetinaStrFS',0.5),
+                     connection_type=OneToOneProjection,strength=__main__.__dict__.get('RetinaStrFS',0.5),
                      nominal_bounds=BoundingBox(radius=0.375),name='Afferent')
     
     topo.sim.connect('FakeRetina','LGNOff',delay = 0.05,
-                     connection_type=OneToOneProjection,strength=locals().get('RetinaStrFS',0.5),
+                     connection_type=OneToOneProjection,strength=__main__.__dict__.get('RetinaStrFS',0.5),
                      nominal_bounds=BoundingBox(radius=0.375),name='Afferent')
 
 
@@ -353,12 +354,12 @@ if __main__.__dict__.get('GC',True):
 
 def secondStage():
     topo.sim.connect('Retina','LGNOn',delay=0.05,
-                    connection_type=SharedWeightCFProjection,strength=locals().get('RetinaStrSS',2.33),
+                    connection_type=SharedWeightCFProjection,strength=__main__.__dict__.get('RetinaStrSS',2.33),
                     nominal_bounds_template=BoundingBox(radius=0.375),name='LGNOnAfferent3',
                     weights_generator=on_weights)
     
     topo.sim.connect('Retina','LGNOff',delay = 0.05,
-                    connection_type=SharedWeightCFProjection,strength=locals().get('RetinaStrSS',2.33),
+                    connection_type=SharedWeightCFProjection,strength=__main__.__dict__.get('RetinaStrSS',2.33),
                     nominal_bounds_template=BoundingBox(radius=0.375),name='LGNOffAfferent4',
                     weights_generator=off_weights)
     
