@@ -20,7 +20,7 @@ import contrib
 from topo.sheet.basic import  JointNormalizingCFSheet_Continuous
 from topo.sheet.lissom import LISSOM
 from topo.sheet.optimized import NeighborhoodMask_Opt, LISSOM_Opt
-from topo.sheet.basic import GeneratorSheet
+from topo.sheet.basic import GeneratorSheet, JointNormalizingCFSheet_Continuous
 from topo.projection.basic import CFProjection, SharedWeightCFProjection,OneToOneProjection
 from topo.responsefn.optimized import CFPRF_DotProduct_opt
 from topo.base.cf import CFSheet
@@ -368,7 +368,7 @@ def secondStage():
     topo.sim['LGNOff'].in_connections[0].strength=0
     randomize_V1Simple_relative_LGN_strength(prob=__main__.__dict__.get('CRS',0.1))
     
-from topo.analysis.featureresponses import MeasureResponseCommand, FeatureMaps, SinusoidalMeasureResponseCommand
+from topo.analysis.featureresponses import MeasureResponseCommand, FeatureMaps, SinusoidalMeasureResponseCommand, FeatureCurveCommand
 FeatureMaps.num_orientation=16
 MeasureResponseCommand.scale=1.0
 MeasureResponseCommand.duration=2.0
