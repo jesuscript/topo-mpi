@@ -88,7 +88,7 @@ receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
 topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
-    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions), output_fns=[transferfn.DivisiveNormalizeL1()])
+    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions) )#, output_fns=[transferfn.DivisiveNormalizeL1()])
 
 
 subcortical_connection_size = (0.2,0.1) # 20 msecs, 1 octave
@@ -96,7 +96,7 @@ subcortical_size = (receptor_size[0]-subcortical_connection_size[0], receptor_si
 subcortical_dimensions = ((-subcortical_size[0]/2, -subcortical_size[1]/2), (subcortical_size[0]/2, subcortical_size[1]/2))
                    
 topo.sim['Subcortical']=sheet.CFSheet(nominal_density=parameters.subcortical_density, 
-    nominal_bounds=sheet.BoundingBox(points=subcortical_dimensions), output_fns=[transferfn.misc.HalfRectify()])
+    nominal_bounds=sheet.BoundingBox(points=subcortical_dimensions) )#, output_fns=[transferfn.misc.HalfRectify()])
 
 
 cortex_connection_size = (0.27083,0.27083)        
@@ -104,135 +104,57 @@ cortex_size = (subcortical_size[0]-cortex_connection_size[0], subcortical_size[1
 cortex_dimensions = ((-cortex_size[0]/2, -cortex_size[1]/2), (cortex_size[0]/2, cortex_size[1]/2))
 
 topo.sim['Cortex'] = sheet.lissom.LISSOM(nominal_density=parameters.cortex_density, tsettle=16, plastic=True, 
-    nominal_bounds=sheet.BoundingBox(points=), output_fns=[transferfn.misc.HomeostaticResponse()])
+    nominal_bounds=sheet.BoundingBox(points=cortex_dimensions), output_fns=[transferfn.misc.HomeostaticResponse()])
 
 topo.sim['Cortex'].joint_norm_fn = topo.sheet.optimized.compute_joint_norm_totals_opt
 
 
 ### Connections
 
-#"""SigmoidedDoG pattern, very rough MGBv STRF calibrated entirely by eye."""
-#topo.sim.connect('Cochlea', 'MGBv', name='Cochlea Afferent', delay=0.05, 
-#    nominal_bounds_template=sheet.BoundingBox(
-#        points=((-mgbv_connection_dimensions[0]/2, -mgbv_connection_dimensions[1]/2),
-#            (mgbv_connection_dimensions[0]/2, mgbv_connection_dimensions[1]/2))),
-#    connection_type=projection.CFProjection, cf_shape=pattern.Constant(), strength=1.0, 
-#    weights_generator=pattern.SigmoidedDoG(positive_size=0.03, positive_aspect_ratio=3.9,
-#        negative_size=0.09, negative_aspect_ratio=1.8, sigmoid_slope=20.0, 
-#        sigmoid_x=0.01, size=0.5))
+"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1."""
+#subcortical_connection_dimensions = ((-subcortical_connection_size[0]/2, -subcortical_connection_size[1]/2), 
+#    (subcortical_connection_size[0]/2, subcortical_connection_size[1]/2))
 
-
-
-#"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1."""     
-#topo.sim.connect('Cochlea', 'MGBv_Onset', name='Cochlea Afferent 1', delay=0.05, 
-#    nominal_bounds_template=sheet.BoundingBox(
-#        points=((-mgbv_onset_connection_dimensions[0]/2, -mgbv_onset_connection_dimensions[1]/2),
-#            (mgbv_onset_connection_dimensions[0]/2, mgbv_onset_connection_dimensions[1]/2))),
-#    connection_type=projection.CFProjection, cf_shape=pattern.Constant(), strength=1.0, 
-#    weights_generator=pattern.SigmoidedDoLG(sigmoid_slope=50.0,sigmoid_orientation=pi/2.0,sigmoid_position=0.015,
-#        positive_size=0.15,positive_tail=0.6,negative_size=0.35,negative_tail=0.5))
-
-#"""DoG pattern, MGBv STRF calibrated by eye to fit spectral dimension of Miller et al. (2002) Figure 1. 
-#and provide a sustained response. In other words identical to the Miller STRF but with no temporal inhibition."""     
-#topo.sim.connect('Cochlea', 'MGBv_Sustained', name='Cochlea Afferent 2', delay=0.05, 
-#    nominal_bounds_template=sheet.BoundingBox(
-#        points=((-mgbv_sustained_connection_dimensions[0]/2, -mgbv_sustained_connection_dimensions[1]/2),
-#            (mgbv_sustained_connection_dimensions[0]/2, mgbv_sustained_connection_dimensions[1]/2))),
-#    connection_type=projection.CFProjection, cf_shape=pattern.Constant(), strength=1.0, 
-#    weights_generator=pattern.DifferenceOfGaussians(positive_size=0.05,positive_aspect_ratio=100.0,
-#        negative_size=0.06,negative_aspect_ratio=100.0, size=0.5))
-
-#"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1.
-#and provide an offset response. In other words identical to the Miller STRF but rotated by pi."""     
-#topo.sim.connect('Cochlea', 'MGBv_Offset', name='Cochlea Afferent 3', delay=0.05, 
-#    nominal_bounds_template=sheet.BoundingBox(
-#        points=((-mgbv_offset_connection_dimensions[0]/2, -mgbv_offset_connection_dimensions[1]/2),
-#            (mgbv_offset_connection_dimensions[0]/2, mgbv_offset_connection_dimensions[1]/2))),
-#    connection_type=projection.CFProjection, cf_shape=pattern.Constant(), strength=1.0, 
-#    weights_generator=pattern.SigmoidedDoLG(sigmoid_slope=50.0,sigmoid_orientation=pi/2.0,sigmoid_position=0.015,
-#        positive_size=0.15,positive_tail=0.6,negative_size=0.35,negative_tail=0.5,orientation=pi))
-
-
-
-
-
-"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1.
-and provide an offset response. In other words identical to the Miller STRF but rotated by pi."""     
-topo.sim.connect('Cochlea', 'MGBv_Onset', name='Cochlea Afferent 1', delay=0.05, 
-    nominal_bounds_template=sheet.BoundingBox(
-        points=((-mgbv_offset_connection_dimensions[0]/2, -mgbv_offset_connection_dimensions[1]/2),
-            (mgbv_offset_connection_dimensions[0]/2, mgbv_offset_connection_dimensions[1]/2))),
-    connection_type=projection.CFProjection, strength=1.0, 
-    weights_generator=pattern.SigmoidedDoLG(sigmoid_slope=50.0,sigmoid_orientation=pi/2.0,sigmoid_position=0.015,
-        positive_size=0.15,positive_tail=0.6,negative_size=0.35,negative_tail=0.5,orientation=0.0))
-
-"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1.
-and provide an offset response. In other words identical to the Miller STRF but rotated by pi."""     
-topo.sim.connect('Cochlea', 'MGBv_Sustained', name='Cochlea Afferent 2', delay=0.05, 
-    nominal_bounds_template=sheet.BoundingBox(
-        points=((-mgbv_offset_connection_dimensions[0]/2, -mgbv_offset_connection_dimensions[1]/2),
-            (mgbv_offset_connection_dimensions[0]/2, mgbv_offset_connection_dimensions[1]/2))),
-    connection_type=projection.CFProjection, strength=1.0, 
-    weights_generator=pattern.SigmoidedDoLG(sigmoid_slope=50.0,sigmoid_orientation=pi/2.0,sigmoid_position=0.015,
-        positive_size=0.15,positive_tail=0.6,negative_size=0.35,negative_tail=0.5,orientation=0.0))
-
-"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1.
-and provide an offset response. In other words identical to the Miller STRF but rotated by pi."""     
-
-connection_field = ((-mgbv_offset_connection_dimensions[0]/2, -mgbv_offset_connection_dimensions[1]/2),
-    (mgbv_offset_connection_dimensions[0]/2, mgbv_offset_connection_dimensions[1]/2))
-
+subcortical_connection_dimensions = ((0.0, 0.0), (subcortical_connection_size[0], subcortical_connection_size[1]))
+    
 strf = pattern.SigmoidedDoLG(sigmoid_slope=50.0, sigmoid_orientation=pi/2.0, sigmoid_position=0.015,
-    positive_size=0.15, positive_tail=0.6, negative_size=0.35, negative_tail=0.5, orientation=0.0)
-        
-topo.sim.connect('Cochlea', 'MGBv_Offset', name='Cochlea Afferent 3', delay=0.05, weights_generator=strf, strength=1.0,
-    nominal_bounds_template=sheet.BoundingBox(points=connection_field), connection_type=projection.CFProjection)
-             
-             
-             
-             
-                                   
-topo.sim.connect(
-    'MGBv_Onset', 'A1', name='MGB Onset Afferent', dest_port=('Activity','JointNormalize','Afferent'),
-    connection_type=projection.CFProjection, delay=0.05, learning_rate=0.9590/8, 
-    strength=1.0, weights_generator=pattern.random.GaussianCloud(gaussian_size=0.27083),
-    nominal_bounds_template=sheet.BoundingBox(points=((-a1_connection_dimensions[0]/2, 
-        -a1_connection_dimensions[1]/2), (a1_connection_dimensions[0]/2, 
-        a1_connection_dimensions[1]/2))))
+        positive_size=0.15, positive_tail=0.6, negative_size=0.35, negative_tail=0.5)
 
-topo.sim.connect(
-    'MGBv_Offset', 'A1', name='MGB Offset Afferent', dest_port=('Activity','JointNormalize','Afferent'),
-    connection_type=projection.CFProjection, delay=0.05, learning_rate=0.9590/8, 
-    strength=1.0, weights_generator=pattern.random.GaussianCloud(gaussian_size=0.27083),
-    nominal_bounds_template=sheet.BoundingBox(points=((-a1_connection_dimensions[0]/2, 
-        -a1_connection_dimensions[1]/2), (a1_connection_dimensions[0]/2, 
-        a1_connection_dimensions[1]/2))))
+topo.sim.connect('Receptor', 'Subcortical', name='Receptor Afferent', weights_generator=strf,
+    nominal_bounds_template=sheet.BoundingBox(points=subcortical_connection_dimensions),
+    connection_type=projection.CFProjection, delay=0.05, strength=1.0) #cf_shape=pattern.Constant(), 
 
-topo.sim.connect(
-    'MGBv_Sustained', 'A1', name='MGB Sustained Afferent', dest_port=('Activity','JointNormalize','Afferent'),
-    connection_type=projection.CFProjection, delay=0.05, learning_rate=0.9590/8, 
-    strength=1.0, weights_generator=pattern.random.GaussianCloud(gaussian_size=0.27083),
-    nominal_bounds_template=sheet.BoundingBox(points=((-a1_connection_dimensions[0]/2, 
-        -a1_connection_dimensions[1]/2), (a1_connection_dimensions[0]/2, 
-        a1_connection_dimensions[1]/2))))
+
+#cortical_connection_dimensions = ((-cortex_connection_size[0]/2, -cortex_connection_size[1]/2), 
+#    (cortex_connection_size[0]/2, cortex_connection_size[1]/2))
+
+cortical_connection_dimensions = ((0.0, 0.0), (cortex_connection_size[0], cortex_connection_size[1]))
+    
+rf = pattern.random.GaussianCloud(gaussian_size=0.27083)
+
+topo.sim.connect('Subcortical', 'Cortex', name='Subcortical Afferent', weights_generator=rf,
+    nominal_bounds_template=sheet.BoundingBox(points=cortical_connection_dimensions), 
+    #dest_port=('Activity','JointNormalize','Afferent'), #BK-ALERT: Whats this mean?
+    connection_type=projection.CFProjection, delay=0.05, strength=1.0, learning_rate=0.9590/8)
+    
+
+rf = pattern.random.GaussianCloud(gaussian_size=0.10417)
+
+topo.sim.connect('Cortex', 'Cortex', name='Lateral Excitatory', weights_generator=rf,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.10417),learning_rate=2.55528,
+    connection_type=projection.ResizableCFProjection, delay=0.05, strength=0.9)
         
-topo.sim.connect(
-    'A1', 'A1', name='Lateral Excitatory', delay=0.05, strength=0.9,
-    connection_type=projection.ResizableCFProjection, learning_rate=2.55528,
-    nominal_bounds_template=sheet.BoundingBox(radius=0.10417),
-    weights_generator=pattern.random.GaussianCloud(gaussian_size=0.10417))
-        
-topo.sim.connect(
-    'A1', 'A1', name='Lateral Inhibitory', delay=0.05, strength=-0.9,
-    connection_type=projection.CFProjection, learning_rate=1.80873,
-    nominal_bounds_template=sheet.BoundingBox(radius=0.22917),
-    weights_generator=pattern.random.GaussianCloud(gaussian_size=0.22917))
+
+rf = pattern.random.GaussianCloud(gaussian_size=0.22917)
+
+topo.sim.connect('Cortex', 'Cortex', name='Lateral Inhibitory', weights_generator=rf,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.22917), learning_rate=1.80873,
+    connection_type=projection.CFProjection, delay=0.05, strength=-0.9)
 
 
 ### Set up appropriate defaults for analysis
 
-# Measure feature maps based on unthresholded initial response
-# for speed and reliability.
+# Measure feature maps based on unthresholded initial response for speed and reliability.
 from topo.analysis.featureresponses import MeasureResponseCommand
 
 MeasureResponseCommand.duration = 0.175
