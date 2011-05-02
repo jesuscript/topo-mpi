@@ -83,8 +83,7 @@ the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 # Guitar rendition of Daisy Bell, in tribute to the IBM 704, 
 # which in 1962 became the first computer ever to 'sing'.
 
-#audio_data = AudioFile(filename="sounds/complex/daisy.wav", 
-#    seconds_per_iteration=0.001, interval_length=0.05)
+audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
 
 #audio_data = AudioFolder(folderpath="/Users/University/Music/iTunes/iTunes Media/Music/Wave (Mono)", 
 #    seconds_per_iteration=0.001, interval_length=0.05, gap_between_sounds=0.0)
@@ -92,7 +91,7 @@ the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 #audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", 
 #    seconds_per_iteration=0.01, interval_length=1.0, gap_between_sounds=0.0)
 
-audio_data = AudioFile(filename="sounds/sine_waves/normalized/00200hz_sine.wav", seconds_per_iteration=0.1, interval_length=0.1)
+#audio_data = AudioFile(filename="sounds/sine_waves/normalized/00200hz_sine.wav", seconds_per_iteration=0.1, interval_length=0.1)
 
 #input_pattern=AuditorySpectrogram(signal=audio_data, 
 input_pattern=Spectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, windowing_function=hanning)
