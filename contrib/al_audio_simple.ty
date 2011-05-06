@@ -122,7 +122,7 @@ strf = pattern.SigmoidedDoLG(sigmoid_slope=50.0, sigmoid_orientation=pi/2.0, sig
 
 topo.sim.connect('Receptor', 'Subcortical', name='Receptor Afferent', weights_generator=strf,
     nominal_bounds_template=sheet.BoundingBox(points=subcortical_connection_dimensions),
-    connection_type=projection.CFProjection, delay=0.05, strength=1.0) #cf_shape=pattern.Constant(), 
+    connection_type=projection.SharedWeightCFProjection, delay=0.05, strength=1.0, weights_output_fns=[]) #cf_shape=pattern.Constant(), 
 
 
 #cortical_connection_dimensions = ((-cortex_connection_size[0]/2, -cortex_connection_size[1]/2), 
