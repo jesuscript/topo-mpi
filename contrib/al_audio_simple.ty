@@ -19,9 +19,8 @@ import topo.sheet.lissom
 import topo.sheet.optimized
 import topo.pattern.random
 
-from topo.pattern.audio import AudioFile, AudioFolder
-from topo.pattern.basic import Spectrogram
 from numpy import hanning
+from topo.pattern.audio import AudioFile, AudioFolder, OctaveSpectrogram
 
 
 parameters.add(
@@ -72,23 +71,31 @@ the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
 # Guitar rendition of Daisy Bell, in tribute to the IBM 704, which in 1962 became the first computer ever to 'sing'.
-audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
+#audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
 
 # Normalised sine waves in the interval 20Hz - 20KHz.
-#audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", seconds_per_iteration=0.001, interval_length=0.2)
+audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", seconds_per_iteration=0.001, interval_length=0.2)
 
 # Set of natural sounds from forrests/woods/rivers/etc.
 #audio_data = AudioFolder(folderpath="/Users/University/Music/iTunes/iTunes Media/Music/Wave (Mono)", seconds_per_iteration=0.001, interval_length=0.2)
 
-spectrogram = Spectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, windowing_function=hanning)
+spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, windowing_function=hanning)
 
+
+### Calibration Sheet
+
+#calibration_sheet_size = (0.35,0.1) # 35 msecs, 10 frequency bins (1 octave)
+#calibration_sheet_dimensions = ((-calibration_sheet_size[0]/2, -calibration_sheet_size[1]/2), (calibration_sheet_size[0]/2, calibration_sheet_size[1]/2))
+
+#topo.sim['Calibration']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, nominal_bounds=sheet.BoundingBox(points=calibration_sheet_dimensions))
+    
 
 ### Sheets
 receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
 topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
-    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions) )#, output_fns=[transferfn.DivisiveNormalizeL1()])
+    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions))
 
 
 subcortical_connection_size = (0.2,0.1) # 20 msecs, 1 octave
@@ -96,7 +103,7 @@ subcortical_size = (receptor_size[0]-subcortical_connection_size[0], receptor_si
 subcortical_dimensions = ((-subcortical_size[0]/2, -subcortical_size[1]/2), (subcortical_size[0]/2, subcortical_size[1]/2))
                    
 topo.sim['Subcortical']=sheet.CFSheet(nominal_density=parameters.subcortical_density, 
-    nominal_bounds=sheet.BoundingBox(points=subcortical_dimensions) )#, output_fns=[transferfn.misc.HalfRectify()])
+    nominal_bounds=sheet.BoundingBox(points=subcortical_dimensions), output_fns=[transferfn.misc.HalfRectify()])
 
 
 cortex_connection_size = (0.27083,0.27083)        
@@ -117,12 +124,14 @@ topo.sim['Cortex'].joint_norm_fn = topo.sheet.optimized.compute_joint_norm_total
 
 subcortical_connection_dimensions = ((0.0, 0.0), (subcortical_connection_size[0], subcortical_connection_size[1]))
     
-strf = pattern.SigmoidedDoLG(sigmoid_slope=50.0, sigmoid_orientation=pi/2.0, sigmoid_position=0.015,
-        positive_size=0.15, positive_tail=0.6, negative_size=0.35, negative_tail=0.5)
+#strf = pattern.SigmoidedDoLG(sigmoid_slope=50.0, sigmoid_orientation=pi/2.0, sigmoid_position=0.015,
+#        positive_size=0.15, positive_tail=0.6, negative_size=0.35, negative_tail=0.5)
+
+strf = pattern.LogGaussian(tail=0.7, x=-0.07, y=-0.005, scale=1.0)
 
 topo.sim.connect('Receptor', 'Subcortical', name='Receptor Afferent', weights_generator=strf,
     nominal_bounds_template=sheet.BoundingBox(points=subcortical_connection_dimensions),
-    connection_type=projection.SharedWeightCFProjection, delay=0.05, strength=1.0, weights_output_fns=[]) #cf_shape=pattern.Constant(), 
+    connection_type=projection.SharedWeightCFProjection, delay=0.05, strength=1.0, weights_output_fns=[])
 
 
 #cortical_connection_dimensions = ((-cortex_connection_size[0]/2, -cortex_connection_size[1]/2), 
