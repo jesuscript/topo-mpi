@@ -74,7 +74,7 @@ the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 #audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
 
 # Normalised sine waves in the interval 20Hz - 20KHz.
-audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", seconds_per_iteration=0.001, interval_length=0.2)
+#audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", seconds_per_iteration=0.001, interval_length=0.2)
 
 # Set of natural sounds from forrests/woods/rivers/etc.
 #audio_data = AudioFolder(folderpath="/Users/University/Music/iTunes/iTunes Media/Music/Wave (Mono)", seconds_per_iteration=0.001, interval_length=0.2)
