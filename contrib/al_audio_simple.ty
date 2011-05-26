@@ -54,7 +54,7 @@ parameters.add(
 
 
 ### Specify weight initialization, response function, and learning function
-projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
+projection.CFProjection.cf_shape=pattern.Constant()
 projection.CFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
 projection.CFProjection.learning_fn=learningfn.optimized.CFPLF_Hebbian_opt()
 projection.CFProjection.weights_output_fns=[transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
@@ -134,9 +134,10 @@ topo.sim.connect('Receptor', 'Subcortical', name='Receptor Afferent', weights_ge
     connection_type=projection.SharedWeightCFProjection, delay=0.05, strength=1.0, weights_output_fns=[])
 
 
-cortical_connection_dimensions = cortex_dimensions
+cortical_connection_dimensions = ((-subcortical_size[0], -subcortical_size[1]), (subcortical_size[0], subcortical_size[1]))
 
-topo.sim.connect('Subcortical', 'Cortex', name='Subcortical Afferent', weights_generator=pattern.Constant(),
+
+topo.sim.connect('Subcortical', 'Cortex', name='Subcortical Afferent', weights_generator=pattern.random.UniformRandom(),
     nominal_bounds_template=sheet.BoundingBox(points=cortical_connection_dimensions), 
     connection_type=projection.CFProjection, delay=0.05, strength=1.0, learning_rate=0.9590/8)
 
