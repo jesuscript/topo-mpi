@@ -80,7 +80,7 @@ audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteratio
 # Set of natural sounds from forrests/woods/rivers/etc.
 #audio_data = AudioFolder(folderpath="/Users/University/Music/iTunes/iTunes Media/Music/Wave (Mono)", seconds_per_iteration=0.001, interval_length=0.2)
 
-spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, windowing_function=hanning)
+spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=1, max_frequency=22049, windowing_function=hanning)
 
 
 
@@ -98,19 +98,21 @@ receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
 topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
-    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions))
+    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions), output_fns=[transferfn.DivisiveNormalizeL1()])
 
+#bk-note: adjust below (subcortical) into range 0-1
 
-subcortical_connection_size = (0.2,0.1) # 20 msecs, 1 octave
-subcortical_size = (receptor_size[0]-subcortical_connection_size[0], receptor_size[1])
+subcortical_connection_size = (0.35,0.1) # 35 msecs, 1 octave
+subcortical_size = (receptor_size[0]-subcortical_connection_size[0], receptor_size[1]-subcortical_connection_size[1])
 subcortical_dimensions = ((-subcortical_size[0]/2, -subcortical_size[1]/2), (subcortical_size[0]/2, subcortical_size[1]/2))
                    
 topo.sim['Subcortical']=sheet.CFSheet(nominal_density=parameters.subcortical_density, 
     nominal_bounds=sheet.BoundingBox(points=subcortical_dimensions), output_fns=[transferfn.misc.HalfRectify()])
 
 
-cortex_connection_size = (0.27083,0.27083)        
-cortex_size = (subcortical_size[0]-cortex_connection_size[0], subcortical_size[1])
+# BK-NOTE: All to all connection, so no need for edge buffering.
+cortex_connection_size = (0.0,0.0)
+cortex_size = (subcortical_size[0]-cortex_connection_size[0], subcortical_size[1]-cortex_connection_size[1])
 cortex_dimensions = ((-cortex_size[0]/2, -cortex_size[1]/2), (cortex_size[0]/2, cortex_size[1]/2))
 
 topo.sim['Cortex'] = sheet.lissom.LISSOM(nominal_density=parameters.cortex_density, tsettle=16, plastic=True, 
@@ -130,7 +132,7 @@ strf = pattern.SigmoidedDoLG(sigmoid_slope=50.0, sigmoid_orientation=pi/2.0, sig
         negative_aspect_ratio=0.3, negative_scale=1.0, negative_size= 0.8, negative_x_shape=0.8, negative_y_shape=0.35)
 
 topo.sim.connect('Receptor', 'Subcortical', name='Receptor Afferent', weights_generator=strf,
-    nominal_bounds_template=sheet.BoundingBox(points=subcortical_connection_dimensions),
+    nominal_bounds_template=sheet.BoundingBox(points=subcortical_connection_dimensions), learning_rate=0.0,
     connection_type=projection.SharedWeightCFProjection, delay=0.05, strength=1.0, weights_output_fns=[])
 
 
