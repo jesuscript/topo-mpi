@@ -19,18 +19,28 @@ import topo.sheet.optimized
 import topo.pattern.random
 
 from numpy import hanning
+from topo.pattern.basic import PowerSpectrum, Spectrogram
 from topo.pattern.audio import AudioFile, AudioFolder, OctaveSpectrogram
+
+# initially the cortex should be activated for the first 10 iterations, otherwise you're doing wrong.
+# tweak transferfn.misc.HomeostaticResponse() if you need to.
+# watch the visual gcal model, make sure it looks like my cortex otherwise the params are wrong, retune.
+# Lastly. run.
+
+# Explain jitter.
 
 
 
 parameters.add(
     receptor_density = param.Number(default=100.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the receptor."""),
-        
-    subcortical_density = param.Number(default=50.0, bounds=(0.0,None), 
+
+    subcortical_density = param.Number(default=10.0, bounds=(0.0,None),         
+#    subcortical_density = param.Number(default=50.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the sub cortical sheet."""),
 
-    cortex_density = param.Number(default=50.0, bounds=(0.0,None), 
+    cortex_density = param.Number(default=10.0, bounds=(0.0,None), 
+#    cortex_density = param.Number(default=50.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the cortex sheet."""),
 
     afferent_strength = param.Number(default=1.5,bounds=(0.0,None), 
@@ -72,15 +82,17 @@ the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
 # Guitar rendition of Daisy Bell, in tribute to the IBM 704, which in 1962 became the first computer ever to 'sing'.
-audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
+#audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
 
 # Normalised sine waves in the interval 20Hz - 20KHz.
 #audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", seconds_per_iteration=0.001, interval_length=0.2)
+audio_data = AudioFile(filename="sounds/sine_waves/normalized/20000hz_sine.wav", seconds_per_iteration=0.001, interval_length=0.2)
 
 # Set of natural sounds from forrests/woods/rivers/etc.
 #audio_data = AudioFolder(folderpath="/Users/University/Music/iTunes/iTunes Media/Music/Wave (Mono)", seconds_per_iteration=0.001, interval_length=0.2)
+#audio_data = AudioFolder(folderpath="/group/project/csng/sounds", seconds_per_iteration=0.001, interval_length=0.2)
 
-spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=1, max_frequency=22049, windowing_function=hanning)
+spectrogram = Spectrogram(signal=audio_data, min_frequency=1, max_frequency=22049, min_latency=10, max_latency=110, windowing_function=hanning)
 
 
 
@@ -97,6 +109,7 @@ spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=1, max_frequenc
 receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
+# Stop calling it normalisation!! Scale with a fixed multiplier toget approx between 0 - 1
 topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
     nominal_bounds=sheet.BoundingBox(points=receptor_dimensions), output_fns=[transferfn.DivisiveNormalizeL1()])
 
