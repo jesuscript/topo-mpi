@@ -19,15 +19,15 @@ import topo.sheet.optimized
 import topo.pattern.random
 
 from numpy import hanning
-from topo.pattern.basic import PowerSpectrum, Spectrogram
+from topo.pattern.basic import PowerSpectrum, Spectrogram, TimeSeriesParam
 from topo.pattern.audio import AudioFile, AudioFolder, OctaveSpectrogram
 
 
 
 parameters.add(
     # Guitar rendition of Daisy Bell, in tribute to the IBM 704, which in 1962 became the first computer ever to 'sing'.
-    audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2
-        doc = """The default source of audio data for the model.""")
+    audio_data = TimeSeriesParam(default=AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2), 
+        doc = """The default source of audio data for the model."""),
 
     receptor_density = param.Number(default=100.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the receptor."""),
@@ -78,7 +78,8 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
-spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, min_latency=10, max_latency=110, windowing_function=hanning, scale=1.0)
+spectrogram = OctaveSpectrogram(signal=parameters.audio_data, min_frequency=20, max_frequency=20000, 
+    min_latency=10, max_latency=110, windowing_function=hanning, scale=0.0001)
 
 
 
@@ -96,7 +97,7 @@ receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
 topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
-    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions), output_fns=[])
+    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions))
 
 
 subcortical_connection_size = (0.35,0.1) # 35 msecs, 1 octave
