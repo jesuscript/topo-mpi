@@ -32,10 +32,10 @@ parameters.add(
     receptor_density = param.Number(default=100.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the receptor."""),
 
-    subcortical_density = param.Number(default=10.0, bounds=(0.0,None),         
+    subcortical_density = param.Number(default=50.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the sub cortical sheet."""),
 
-    cortex_density = param.Number(default=10.0, bounds=(0.0,None), 
+    cortex_density = param.Number(default=50.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the cortex sheet."""),
 
     afferent_strength = param.Number(default=1.5,bounds=(0.0,None), 
@@ -80,15 +80,6 @@ spectrogram = OctaveSpectrogram(signal=parameters.audio_data, min_frequency=20, 
     min_latency=10, max_latency=110, windowing_function=hanning, scale=0.0001)
 
 
-
-### Calibration Tools
-
-calibration_sheet_size = (0.35,0.1) # 35 msecs, 10 frequency bins (1 octave)
-calibration_sheet_dimensions = ((-calibration_ sheet_size[0]/2, -calibration_sheet_size[1]/2), (calibration_sheet_size[0]/2, calibration_sheet_size[1]/2))
-
-topo.sim['Calibration']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, nominal_bounds=sheet.BoundingBox(points=calibration_sheet_dimensions))
-    
-    
 
 ### Sheets
 receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
