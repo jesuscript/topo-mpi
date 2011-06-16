@@ -96,7 +96,7 @@ receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
 topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
-    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions), output_fns=[transferfn.DivisiveNormalizeL1()])
+    nominal_bounds=sheet.BoundingBox(points=receptor_dimensions), output_fns=[])
 
 
 subcortical_connection_size = (0.35,0.1) # 35 msecs, 1 octave
