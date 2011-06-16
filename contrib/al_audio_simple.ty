@@ -25,6 +25,10 @@ from topo.pattern.audio import AudioFile, AudioFolder, OctaveSpectrogram
 
 
 parameters.add(
+    # Guitar rendition of Daisy Bell, in tribute to the IBM 704, which in 1962 became the first computer ever to 'sing'.
+    audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2
+        doc = """The default source of audio data for the model.""")
+
     receptor_density = param.Number(default=100.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the receptor."""),
 
@@ -74,25 +78,14 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
-# Guitar rendition of Daisy Bell, in tribute to the IBM 704, which in 1962 became the first computer ever to 'sing'.
-#audio_data = AudioFile(filename="sounds/complex/daisy.wav", seconds_per_iteration=0.001, interval_length=0.2)
-
-# Normalised sine waves in the interval 20Hz - 20KHz.
-#audio_data = AudioFolder(folderpath="sounds/sine_waves/normalized", seconds_per_iteration=0.001, interval_length=0.2)
-#audio_data = AudioFile(filename="sounds/sine_waves/normalized/20000hz_sine.wav", seconds_per_iteration=0.001, interval_length=0.2)
-
-# Set of natural sounds from forrests/woods/rivers/etc.
-#audio_data = AudioFolder(folderpath="/Users/University/Music/iTunes/iTunes Media/Music/Wave (Mono)", seconds_per_iteration=0.001, interval_length=0.2)
-audio_data = AudioFolder(folderpath="/group/project/csng/sounds", seconds_per_iteration=0.001, interval_length=0.2)
-
-spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, min_latency=10, max_latency=110, windowing_function=hanning, normalization_factor=1)
+spectrogram = OctaveSpectrogram(signal=audio_data, min_frequency=20, max_frequency=20000, min_latency=10, max_latency=110, windowing_function=hanning, scale=1.0)
 
 
 
 ### Calibration Tools
 
 #calibration_sheet_size = (0.35,0.1) # 35 msecs, 10 frequency bins (1 octave)
-#calibration_sheet_dimensions = ((-calibration_sheet_size[0]/2, -calibration_sheet_size[1]/2), (calibration_sheet_size[0]/2, calibration_sheet_size[1]/2))
+#calibration_sheet_dimensions = ((-calibration_ sheet_size[0]/2, -calibration_sheet_size[1]/2), (calibration_sheet_size[0]/2, calibration_sheet_size[1]/2))
 
 #topo.sim['Calibration']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, nominal_bounds=sheet.BoundingBox(points=calibration_sheet_dimensions))
     
