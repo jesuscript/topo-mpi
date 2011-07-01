@@ -1,25 +1,21 @@
 """
 The complex cell LISSOM model.
 
-Ján Antolík and James A. Bednar
+Jan Antolik and James A. Bednar
 Development of Maps of Simple and Complex Cells in the Primary Visual Cortex
 Frontiers in Computation Neuroscience 2011; 5: 17. 
 """
 __version__='$Revision: 8265 $'
 
-
 import numpy
-
 from math import pi, sqrt
-
 import param
 
 import topo.pattern.basic
 import topo.pattern.random
-import __main__
-import os
-
-from topo.sheet.lissom import LISSOM, JointScaling 
+import topo.pattern.image
+from topo.sheet.lissom import LISSOM
+from topo.sheet.basic import JointNormalizingCFSheet_Continuous
 from topo.sheet.basic import GeneratorSheet
 from topo.projection.basic import CFProjection, SharedWeightCFProjection,OneToOneProjection
 from topo.responsefn.optimized import CFPRF_DotProduct_opt
@@ -33,27 +29,26 @@ from topo.transferfn.basic import PiecewiseLinear,DivisiveNormalizeL1, Homeostat
 from topo import numbergen
 from topo.pattern.basic import Gaussian
 from topo.base.functionfamily import CoordinateMapperFn
-from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis,SimpleHomeoSigmoid, Jitterer, AddGC, SimpleHomeoLinear, Expander
-from topo.misc.numbergenerator import UniformRandom, BoundedNumber, ExponentialDecay
+from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Jitterer, AddGC, SimpleHomeoLinear, Expander
+from topo.numbergen import UniformRandom, BoundedNumber, ExponentialDecay
 
-topo.sim.name = "CCSimple"
+topo.sim.name = "complex_cell_lissom"
 
 #### Set up retinal inputs
 
-num_inputs=1
 image_filenames=["images/konig/seq1/seq1-%05d.tif"%(i*10+1) for i in xrange(100)]
-inputs=[input_type(filename=f,
+inputs=[topo.pattern.image.FileImage(filename=f,
 	            size=10.0,  #size_normalization='original',(size=10.0)
 	            x=0,y=0,scale=0.5,orientation=0)
         for f in image_filenames]
 
-input = Jitterer(generator=topo.pattern.basic.Selector(generators=inputs),orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=15,jitter_magnitude=0.4,seed=5013)
+input = Jitterer(generator=topo.pattern.basic.Selector(generators=inputs),orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=15,jitter_magnitude=0.4)
 ring = topo.pattern.basic.Composite(operator=numpy.add,x=numbergen.UniformRandom(lbound=-1.0,ubound=1.0,seed=12),
                                     y=numbergen.UniformRandom(lbound=-1.0,ubound=1.0,seed=36),
 		                    generators=[topo.pattern.basic.Ring(size=0.5, aspect_ratio=1.0, scale=0.064,thickness=0.02,
                                                 offset=0.0,
                                                 bounds=BoundingBox(radius=2.125), smoothing=0.02),
-                                		topo.pattern.random.UniformRandom(seed=13,offset=0, scale=0.01)]
+                                		topo.pattern.random.UniformRandom(offset=0, scale=0.01)]
                                    )
 
 retinal_waves=Expander(generator=ring,orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=15,speed=0.3)
@@ -72,7 +67,7 @@ jitterOn = Jitter(rand =numbergen.UniformRandom(seed=1023))
 jitterOff = Jitter(rand =numbergen.UniformRandom(seed=1023))
 
 # Specify weight initialization, response function, and learning function
-CFProjection.weights_generator=topo.pattern.random.UniformRandom(seed=1023)
+CFProjection.weights_generator=topo.pattern.random.UniformRandom()
 CFProjection.cf_shape=topo.pattern.basic.Disk(smoothing=0.0)
 CFProjection.response_fn=CFPRF_DotProduct_opt()
 CFProjection.learning_fn=CFPLF_Hebbian_opt()
@@ -107,12 +102,12 @@ topo.sim['LGNOff']=LISSOM(nominal_density=48,
                            output_fns=[HalfRectify(t_init=0.0)],tsettle=0,
                            measure_maps=False)
 
-topo.sim['V1Simple'] = JointScaling(nominal_density=96,
+topo.sim['V1Simple'] = JointNormalizingCFSheet_Continuous(nominal_density=96,
                         nominal_bounds=BoundingBox(radius=0.5),
                         output_fns=[ActivityHysteresis(time_constant=0.3),NN,V1Simple_OF])
 
                         
-topo.sim['V1Complex'] = JointScaling(nominal_density=96,
+topo.sim['V1Complex'] = JointNormalizingCFSheet_Continuous(nominal_density=96,
                         nominal_bounds=BoundingBox(radius=0.5),
                         output_fns=[ActivityHysteresis(time_constant=0.3),V1Complex_OF])
 
@@ -151,7 +146,7 @@ topo.sim.connect('LGNOn','V1Simple',delay=0.025,dest_port=('Activity','JointNorm
                  connection_type=CFProjection,strength=LGNOnStr,name='LGNOnAfferent',
                  weights_generator=topo.pattern.basic.Composite(operator=numpy.multiply, 
                      generators=[g1
-                 ,topo.pattern.random.UniformRandom(seed=513)]),
+                 ,topo.pattern.random.UniformRandom()]),
                  nominal_bounds_template=BoundingBox(radius=0.2),
                  coord_mapper=jitterOn,apply_output_fns_init=False,
                  learning_rate=(BoundedNumber(bounds=(0.0,None),generator=
@@ -163,7 +158,7 @@ topo.sim.connect('LGNOff','V1Simple',delay=0.025,dest_port=('Activity','JointNor
                  connection_type=CFProjection,strength=LGNOffStr,name='LGNOffAfferent',
                  weights_generator=topo.pattern.basic.Composite(operator=numpy.multiply, 
                      generators=[g2
-                 ,topo.pattern.random.UniformRandom(seed=17)]),
+                 ,topo.pattern.random.UniformRandom()]),
                  nominal_bounds_template=BoundingBox(radius=0.2),
                  coord_mapper=jitterOff,apply_output_fns_init=False,
                  learning_rate=(BoundedNumber(bounds=(0.0,None),generator=
@@ -174,7 +169,7 @@ topo.sim.connect('LGNOff','V1Simple',delay=0.025,dest_port=('Activity','JointNor
 topo.sim.connect('V1Simple','V1Complex',delay=0.025,
                  connection_type=CFProjection,strength=2.5,name='V1SimpleAfferent',
                  weights_generator=Gaussian(aspect_ratio=1.0, size=0.05),
-                 nominal_bounds_template=BoundingBox(radius=0.075,learning_rate=0.0)
+                 nominal_bounds_template=BoundingBox(radius=0.075),learning_rate=0.0)
                 
 topo.sim.connect('V1Complex','V1Simple',delay=0.025,
                  connection_type=CFProjection,strength=0.14,name='V1SimpleFeedbackExc1',
@@ -185,7 +180,7 @@ topo.sim.connect('V1Complex','V1Simple',delay=0.025,
 topo.sim.connect('V1Complex','V1Simple',delay=0.025,
                  connection_type=CFProjection,strength=-4.6,name='V1SimpleFeedbackInh',
                  weights_generator=Gaussian(aspect_ratio=1.0, size=2.5),
-                 nominal_bounds_template=BoundingBox(radius=0.2,learning_rate=0)
+                 nominal_bounds_template=BoundingBox(radius=0.2),learning_rate=0)
 
 
 topo.sim.connect('V1Complex','V1Complex',delay=0.025,name='LateralExcitatory',
@@ -198,7 +193,7 @@ topo.sim.connect('V1Complex','V1Complex',delay=0.025,name='LateralInhibitory',
                  connection_type=CFProjection,strength=-1.5,
                  weights_generator=topo.pattern.basic.Composite(operator=numpy.multiply, 
                      generators=[Gaussian(aspect_ratio=1.0, size=2*0.22917),
-                                topo.pattern.random.UniformRandom(seed=7)]),
+                                topo.pattern.random.UniformRandom()]),
                  nominal_bounds_template=BoundingBox(radius=0.4),
                  learning_rate=(BoundedNumber(bounds=(0.0,None),generator=
                                ExponentialDecay(starting_value=0.2,time_constant=4000))))
