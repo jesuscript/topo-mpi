@@ -3,7 +3,8 @@ Test script for a simple auditory system using GCAL without the GC.
 Paramater callibration is almost identical to the visual GCAL model, with a few tweaks to the subcortical to cortex
 projection strength.
 
-This version employs a gaussian cloud projection from the subcortical region to the cortical region.
+This version employs a gaussian cloud projection from the subcortical region to the cortical region, and jitters the
+projection from subcortical to cortex.
 """
 
 __version__='$Revision: 11483 $'
