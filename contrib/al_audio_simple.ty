@@ -32,10 +32,10 @@ parameters.add(
     receptor_density = param.Number(default=100.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the receptor."""),
 
-    subcortical_density = param.Number(default=10.0, bounds=(0.0,None),         
+    subcortical_density = param.Number(default=50.0, bounds=(0.0,None),         
         doc = """The nominal_density to use for the sub cortical sheet."""),
 
-    cortex_density = param.Number(default=10.0, bounds=(0.0,None), 
+    cortex_density = param.Number(default=50.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the cortex sheet."""),
 
     afferent_strength = param.Number(default=1.5,bounds=(0.0,None), 
@@ -76,17 +76,19 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
+# scale for daisy = 11,100 so scale = 0.00009
+
 spectrogram = OctaveSpectrogram(signal=parameters.audio_data, min_frequency=20, max_frequency=20000, 
-    min_latency=10, max_latency=110, windowing_function=hanning, scale=0.0001)
+    min_latency=10, max_latency=110, windowing_function=hanning, scale=0.00009)
 
 
 
 ### Calibration Tools
 
-calibration_sheet_size = (0.35,0.1) # 35 msecs, 10 frequency bins (1 octave)
-calibration_sheet_dimensions = ((-calibration_ sheet_size[0]/2, -calibration_sheet_size[1]/2), (calibration_sheet_size[0]/2, calibration_sheet_size[1]/2))
+#calibration_sheet_size = (0.35,0.1) # 35 msecs, 10 frequency bins (1 octave)
+#calibration_sheet_dimensions = ((-calibration_sheet_size[0]/2, -calibration_sheet_size[1]/2), (calibration_sheet_size[0]/2, calibration_sheet_size[1]/2))
 
-topo.sim['Calibration']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, nominal_bounds=sheet.BoundingBox(points=calibration_sheet_dimensions))
+#topo.sim['Calibration']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, nominal_bounds=sheet.BoundingBox(points=calibration_sheet_dimensions))
     
     
 
@@ -94,7 +96,7 @@ topo.sim['Calibration']=sheet.GeneratorSheet(nominal_density=parameters.receptor
 receptor_size = (1.0,1.0) # 100 msecs, 100 frequency bins (10 octaves)
 receptor_dimensions = ((-receptor_size[0]/2, -receptor_size[1]/2), (receptor_size[0]/2, receptor_size[1]/2))
 
-topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram,
+topo.sim['Receptor']=sheet.GeneratorSheet(nominal_density=parameters.receptor_density, input_generator=spectrogram, period=1.0, phase=0.05, 
     nominal_bounds=sheet.BoundingBox(points=receptor_dimensions))
 
 
@@ -136,23 +138,27 @@ topo.sim.connect('Receptor', 'Subcortical', name='Receptor Afferent', weights_ge
 cortical_connection_dimensions = ((-subcortical_size[0], -subcortical_size[1]), (subcortical_size[0], subcortical_size[1]))
 
 
-topo.sim.connect('Subcortical', 'Cortex', name='Subcortical Afferent', weights_generator=pattern.random.UniformRandom(),
+topo.sim.connect('Subcortical', 'Cortex', name='Subcortical Afferent', 
+    #weights_generator=pattern.random.UniformRandom(),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083),
     nominal_bounds_template=sheet.BoundingBox(points=cortical_connection_dimensions), 
-    connection_type=projection.CFProjection, delay=0.05, strength=1.0, learning_rate=0.9590/8)
+    connection_type=projection.CFProjection, delay=0.05, strength=parameters.afferent_strength, learning_rate=parameters.afferent_lr, learning_fn=learningfn.optimized.CFPLF_Hebbian_opt())
 
 
-rf = pattern.random.GaussianCloud(gaussian_size=0.10417)
+#rf = pattern.random.GaussianCloud(gaussian_size=0.10417)
+rf = pattern.Gaussian(aspect_ratio=1.0, size=0.05)
 
 topo.sim.connect('Cortex', 'Cortex', name='Lateral Excitatory', weights_generator=rf,
-    nominal_bounds_template=sheet.BoundingBox(radius=0.10417),learning_rate=2.55528,
-    connection_type=projection.ResizableCFProjection, delay=0.05, strength=0.9)
+    nominal_bounds_template=sheet.BoundingBox(radius=0.104),learning_rate=parameters.excitatory_lr,
+    connection_type=projection.CFProjection, delay=0.05, strength=parameters.excitatory_strength)
         
 
-rf = pattern.random.GaussianCloud(gaussian_size=0.22917)
+#rf = pattern.random.GaussianCloud(gaussian_size=0.22917)
+rf = pattern.random.GaussianCloud(gaussian_size=0.15)
 
 topo.sim.connect('Cortex', 'Cortex', name='Lateral Inhibitory', weights_generator=rf,
-    nominal_bounds_template=sheet.BoundingBox(radius=0.22917), learning_rate=1.80873,
-    connection_type=projection.CFProjection, delay=0.05, strength=-0.9)
+    nominal_bounds_template=sheet.BoundingBox(radius=0.22917), learning_rate=parameters.inhibitory_lr,
+    connection_type=projection.CFProjection, delay=0.05, strength=-1.0*parameters.inhibitory_strength)
 
 
 
