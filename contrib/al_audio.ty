@@ -5,14 +5,12 @@ projection strength.
 
 This version employs a gaussian cloud projection from the subcortical region to the cortical region.
 """
+
 __version__='$Revision: 11483 $'
-
-
-from math import pi
 
 import param
 
-from topo import learningfn,transferfn,pattern,projection,responsefn,sheet
+from topo import learningfn, transferfn, pattern, projection, responsefn, sheet
 
 import topo.learningfn.optimized
 import topo.learningfn.projfn 
@@ -26,14 +24,14 @@ import topo.transferfn.misc
 
 from numpy import hanning
 from topo.pattern.basic import TimeSeriesParam
-from topo.pattern.audio import AudioFile, AudioFolder, OctaveSpectrogram
+from topo.pattern.audio import AudioFile, OctaveSpectrogram
 
 
 
 # Parameters that can be passed on the command line using -p
 from topo.misc.commandline import global_params as p
 p.add(
-    audio_data = TimeSeriesParam(default=AudioFile(filename="/Users/Bilal/Desktop/Twilight_Section.wav", seconds_per_iteration=0.001, interval_length=0.2), 
+    audio_data = TimeSeriesParam(default=AudioFile(seconds_per_iteration=0.001, interval_length=0.2), 
         doc = """The default source of audio data for the model."""),
 
     receptor_density = param.Number(default=100.0, bounds=(0.0,None), 
@@ -68,7 +66,6 @@ p.add(
 
 
 ### Specify weight initialization, response function, and learning function
-#projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
 projection.CFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
 projection.CFProjection.learning_fn=learningfn.optimized.CFPLF_Hebbian_opt()
 projection.CFProjection.weights_output_fns=[transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
@@ -119,7 +116,6 @@ topo.sim['Cortex'] = sheet.lissom.LISSOM(nominal_density=p.cortex_density,
     nominal_bounds=sheet.BoundingBox(points=cortex_dimensions),
     output_fns=[transferfn.misc.HomeostaticResponse()])
 
-#topo.sim['Cortex'].joint_norm_fn=topo.sheet.optimized.compute_joint_norm_totals_opt
 
 
 ### Connections
@@ -145,10 +141,8 @@ topo.sim.connect(
     connection_type=projection.CFProjection,learning_rate=p.afferent_lr,
     nominal_bounds_template=sheet.BoundingBox(points=cortical_connection_dimensions),
     weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083),
-    #weights_generator=pattern.random.UniformRandom(),
     learning_fn=learningfn.optimized.CFPLF_Hebbian_opt())
                      
-
 
 topo.sim.connect(
     'Cortex','Cortex',delay=0.05,strength=p.excitatory_strength,name='LateralExcitatory',
