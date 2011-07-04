@@ -43,10 +43,10 @@ p.add(
     cortex_density = param.Number(default=50.0, bounds=(0.0,None), 
         doc = """The nominal_density to use for the cortex sheet."""),
 
-    scale=param.Number(default=0.08,inclusive_bounds=(False,True),doc="""
+    scale=param.Number(default=0.002,inclusive_bounds=(False,True),doc="""
         Amplitude of the input patterns"""),
 
-    afferent_strength = param.Number(default=2.7,bounds=(0.0,None), 
+    afferent_strength = param.Number(default=5.0,bounds=(0.0,None), 
         doc = """Overall strength of the afferent projection to the cortex."""),
 
     excitatory_strength = param.Number(default=1.7,bounds=(0.0,None), 
