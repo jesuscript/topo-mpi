@@ -37,8 +37,8 @@ class surround_analysis():
     sheet_name = ""
     data_dict = {}
     
-    low_contrast=100
-    high_contrast=200
+    low_contrast=__main__.__dict__.get('LC',50)
+    high_contrast=100
     
     def __init__(self,sheet_name="V1Complex"):
         from topo.analysis.featureresponses import MeasureResponseCommand, FeatureMaps, FeatureCurveCommand, UnitCurveCommand, SinusoidalMeasureResponseCommand,PatternPresenter
@@ -52,9 +52,9 @@ class surround_analysis():
 	
 	
         from topo.analysis.featureresponses import PatternPresenter            
-        PatternPresenter.duration=2.0
-        import topo.command.pylabplots
-        reload(topo.command.pylabplots)
+        PatternPresenter.duration=4.0
+        import topo.command.pylabplot
+        reload(topo.command.pylabplot)
 
 	
         FeatureCurveCommand.curve_parameters=[{"contrast":self.low_contrast},{"contrast":self.high_contrast}]
@@ -78,7 +78,9 @@ class surround_analysis():
                 xindex = self.center_r+offset_x+x
                 yindex = self.center_c+offset_y+y
                 xcoor,ycoor = self.sheet.matrixidx2sheet(xindex,yindex)
-                topo.command.pylabplots.measure_size_response.instance(sheet=self.sheet,num_phase=4,num_sizes=ns,max_size=3.0,coords=[(xcoor,ycoor)])(coords=[(xcoor,ycoor)],frequencies=[__main__.__dict__.get('FREQ',2.4)])        
+                c= topo.command.pylabplot.measure_size_response.instance(sheet=self.sheet,num_phase=8,num_sizes=ns,max_size=3.0,coords=[(xcoor,ycoor)])
+                c.duraton=4.0
+                c(coords=[(xcoor,ycoor)],frequencies=[__main__.__dict__.get('FREQ',2.4)])        
                 
                 self.data_dict[(xindex,yindex)] = {}
                 self.data_dict[(xindex,yindex)]["ST"] = self.calculate_RF_sizes(xindex, yindex)
@@ -88,10 +90,10 @@ class surround_analysis():
                 self.plot_orientation_contrast_tuning(xindex,yindex)
                 self.plot_orientation_contrast_tuning_abs(xindex,yindex)
                 
-                f = open(normalize_path("dict.dat"),'wb')
-	        import pickle
-        	pickle.dump(self.data_dict,f)
-		f.close()
+                #f = open(normalize_path("dict.dat"),'wb')
+	        #import pickle
+        	#pickle.dump(self.data_dict,f)
+		#f.close()
         
         self.plot_histograms_of_measures()
         lhi = compute_local_homogeneity_index(self.sheet.sheet_views['OrientationPreference'].view()[0]*pi,0.5)                
@@ -102,12 +104,17 @@ class surround_analysis():
         
 
     def perform_orientation_contrast_analysis(self,data,xcoor,ycoor,xindex,yindex):
+    
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!
+        cc = self.low_contrast
+        self.low_contrast=self.high_contrast
+    
         curve_data={}
         hc_curve = data["Contrast = " + str(self.high_contrast) + "%" ]
         lc_curve = data["Contrast = " + str(self.low_contrast) + "%" ]
         
-        topo.command.pylabplots.measure_or_tuning(num_phase=4,num_orientation=12,size=lc_curve["measures"]["peak_near_facilitation"],curve_parameters=[{"contrast":self.low_contrast}],display=True,coords=[(xcoor,ycoor)],frequencies=[__main__.__dict__.get('FREQ',2.4)])
-        topo.command.pylabplots.cyclic_tuning_curve.instance(x_axis="orientation",coords=[(xcoor,ycoor)])
+        topo.command.pylabplot.measure_or_tuning(num_phase=4,num_orientation=12,size=lc_curve["measures"]["peak_near_facilitation"],curve_parameters=[{"contrast":self.low_contrast}],display=True,coords=[(xcoor,ycoor)],frequencies=[__main__.__dict__.get('FREQ',2.4)])
+        topo.command.pylabplot.cyclic_tuning_curve.instance(x_axis="orientation",coords=[(xcoor,ycoor)])
         
         curve_name_ort = "Contrast = " + str(self.low_contrast) + "%";
         
@@ -125,16 +132,17 @@ class surround_analysis():
         curve_data["ORTC"]["info"]={}
         curve_data["ORTC"]["info"]["pref_or"]=orr
         print "ORIENTATION:", orr 
-        topo.command.pylabplots.measure_orientation_contrast(sizecenter=lc_curve["measures"]["peak_near_facilitation"],
+        topo.command.pylabplot.measure_orientation_contrast(sizecenter=hc_curve["measures"]["peak_near_facilitation"],
                                                              orientation_center=orr,
                                                              sizesurround=4.0,
                                                              size=0.0,
                                                              display=True,
                                                              contrastcenter=self.low_contrast,
-                                                             thickness=4.0-lc_curve["measures"]["peak_near_facilitation"],
+                                                             thickness=4.0-hc_curve["measures"]["peak_near_facilitation"],
+                                                             duration=4.0,
                                                              num_phase=8,
 							     frequencies=[__main__.__dict__.get('FREQ',2.4)],
-                                                             curve_parameters=[{"contrastsurround":self.low_contrast},{"contrastsurround":self.high_contrast}],coords=[(xcoor,ycoor)])
+                                                             curve_parameters=[{"contrastsurround":self.high_contrast}],coords=[(xcoor,ycoor)])
         
         for curve_label in sorted(self.sheet.curve_dict['orientationsurround'].keys()):
             print curve_label
@@ -169,6 +177,9 @@ class surround_analysis():
         curve_data["ORTC"]["measures"]["colinear_lc_suppresion_index"] = (peak_or_response - lc_pref_or_resp) / peak_or_response
         curve_data["ORTC"]["measures"]["orcontrast_hc_suppresion_index"] = (peak_or_response - hc_cont_or_resp) / peak_or_response 
         curve_data["ORTC"]["measures"]["orcontrast_lc_suppresion_index"] = (peak_or_response - lc_cont_or_resp) / peak_or_response
+        
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!
+        self.low_contrast = cc
         
         return curve_data 
 
@@ -220,7 +231,7 @@ class surround_analysis():
             x_values = sorted(curve.keys())
             y_values = [curve[key].view()[0][xindex, yindex] for key in x_values]
             
-            f.plot(x_values, y_values, lw=3, color=colors[i])
+            f.plot(x_values, y_values, lw=3, color=colors[i],label=curve_label)
             
                 
             f.annotate('', xy=(measurment[curve_label]["measures"]["peak_near_facilitation"], y_values[measurment[curve_label]["measures"]["peak_near_facilitation_index"]]), xycoords='data',
@@ -274,8 +285,6 @@ class surround_analysis():
         
         measurment = self.data_dict[(xindex,yindex)]["OCT"]
         i = 0
-        hc_curve_name_orc = "Contrastsurround = " + str(self.high_contrast) + "%";
-        
         for curve_label in measurment.keys():
             
             print "AAA:",curve_label
@@ -493,7 +502,7 @@ def plot_neural_dynamics(sheet_names,neurons,pattern_generator,prefix):
         for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
         
         pp({},{})
-        topo.guimain.refresh_activity_windows()
+        #topo.guimain.refresh_activity_windows()
         
         for key in sheet_names:
             for i in topo.sim[key].projections().keys():
@@ -562,7 +571,7 @@ def test(x,y,cs,scale):
     for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
         
     pp({},{})
-    topo.guimain.refresh_activity_windows()
+    #topo.guimain.refresh_activity_windows()
     
     LongEI = topo.sim["V1ComplexInh"].projections()["LongEI"].cfs[xx,yy].weights
     LongEIAct = topo.sim["V1ComplexInh"].projections()["LongEI"].activity[xx,yy]
@@ -579,7 +588,7 @@ def test(x,y,cs,scale):
     for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
         
     pp({},{})
-    topo.guimain.refresh_activity_windows()
+    #topo.guimain.refresh_activity_windows()
     
     LongEIOrt = topo.sim["V1ComplexInh"].projections()["LongEI"].cfs[xx,yy].weights
     LongEIActOrt = topo.sim["V1ComplexInh"].projections()["LongEI"].activity[xx,yy]
@@ -643,7 +652,7 @@ def size_tuning_activity_evolution(x,y,cs,scale):
     for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
 
     pp({},{})
-    topo.guimain.refresh_activity_windows()
+    #topo.guimain.refresh_activity_windows()
     
     V1CActivity1 = topo.sim["V1Complex"].activity.copy()
 
@@ -658,7 +667,7 @@ def size_tuning_activity_evolution(x,y,cs,scale):
     for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
         
     pp({},{})
-    topo.guimain.refresh_activity_windows()
+    #topo.guimain.refresh_activity_windows()
     
     V1CActivity2 = topo.sim["V1Complex"].activity.copy()
 
@@ -673,7 +682,7 @@ def size_tuning_activity_evolution(x,y,cs,scale):
     for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
         
     pp({},{})
-    topo.guimain.refresh_activity_windows()
+    #topo.guimain.refresh_activity_windows()
     
     V1CActivity3 = topo.sim["V1Complex"].activity.copy()
 
@@ -730,7 +739,7 @@ def size_tuning_analysis(x,y,scale):
 	for f in PatternDrivenAnalysis.pre_presentation_hooks: f()
 
 	pp({},{})
-	topo.guimain.refresh_activity_windows()
+	#topo.guimain.refresh_activity_windows()
 	
 	activities_c.append(topo.sim["V1Complex"].activity.copy())
 	activities_ci.append(topo.sim["V1ComplexInh"].activity.copy())
@@ -741,7 +750,7 @@ def size_tuning_analysis(x,y,scale):
 	for f in PatternDrivenAnalysis.post_analysis_session_hooks: f()
     
     
-    a = []if __main__.__dict__.get('EarlyStopping',False):
+    a = []
     b = []
     c = []
 
@@ -769,10 +778,7 @@ def size_tuning_analysis(x,y,scale):
 
 	
     pylab.figure()
-    pylab.plot(b,a)
+    pylab.plot(b,a,'r',label='EXC')
+    pylab.plot(b,c,'b',label='INH')
+    release_fig("STC_settling_complex")	
     
-    release_fig("STC_settling_complex_exc.png")	
-    
-    pylab.figure()
-    pylab.plot(b,c)
-    release_fig("STC_settling_complex_inh.png")	
