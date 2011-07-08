@@ -25,7 +25,7 @@ import topo.transferfn.misc
 
 from numpy import hanning
 from topo.pattern.basic import TimeSeriesParam
-from topo.pattern.audio import AudioFile, OctaveSpectrogram
+from topo.pattern.audio import AudioFile, CochlearSpectrogram
 
 
 
@@ -105,12 +105,12 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
-spectrogram = OctaveSpectrogram(
+spectrogram = CochlearSpectrogram(
     signal = p.audio_data, 
     min_frequency = 20, 
     max_frequency = 20000, 
-    min_latency = 10, 
-    max_latency = 110, 
+    min_latency = 0, 
+    max_latency = 100, 
     windowing_function = hanning, 
     scale = p.scale )
 
