@@ -25,7 +25,7 @@ import topo.transferfn.misc
 
 from numpy import hanning
 from topo.pattern.basic import TimeSeriesParam
-from topo.pattern.audio import AudioFile, CochlearSpectrogram
+from topo.pattern.audio import AudioFile, LogSpectrogram
 
 
 
@@ -105,7 +105,8 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
-spectrogram = CochlearSpectrogram(
+spectrogram = LogSpectrogram(
+    log_base = 2,
     signal = p.audio_data, 
     min_frequency = 20, 
     max_frequency = 20000, 
@@ -197,7 +198,7 @@ strf = pattern.SigmoidedDoLG(
 topo.sim.connect('Receptor', 'Subcortical',
     name = 'ReceptorAfferent',
     delay = 0.05,
-    strength = 0.04,
+    strength = 15.0,
     connection_type = projection.SharedWeightCFProjection,
     nominal_bounds_template = sheet.BoundingBox(points=subcortical_connection_dimensions),
     weights_generator = strf )
