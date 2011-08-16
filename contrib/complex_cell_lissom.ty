@@ -29,17 +29,25 @@ from topo.transferfn.basic import PiecewiseLinear,DivisiveNormalizeL1, Homeostat
 from topo import numbergen
 from topo.pattern.basic import Gaussian
 from topo.base.functionfamily import CoordinateMapperFn
-from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Jitterer, AddGC, SimpleHomeoLinear, Expander
+from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Jitterer, AddGC, SimpleHomeoLinear, ExpanderOld
 from topo.numbergen import UniformRandom, BoundedNumber, ExponentialDecay
 
 topo.sim.name = "complex_cell_lissom"
+
+
+!!!!!!!!!
+####
+Need to check out 
+LGNAff1 LGNAff2 and RingScale
+analysis_scale=0.6
+ImageScale=0.55
 
 #### Set up retinal inputs
 
 image_filenames=["images/konig/seq1/seq1-%05d.tif"%(i*10+1) for i in xrange(100)]
 inputs=[topo.pattern.image.FileImage(filename=f,
 	            size=10.0,  #size_normalization='original',(size=10.0)
-	            x=0,y=0,scale=0.5,orientation=0)
+	            x=0,y=0,scale=0.55,orientation=0)
         for f in image_filenames]
 
 input = Jitterer(generator=topo.pattern.basic.Selector(generators=inputs),orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=15,jitter_magnitude=0.4)
@@ -51,7 +59,7 @@ ring = topo.pattern.basic.Composite(operator=numpy.add,x=numbergen.UniformRandom
                                 		topo.pattern.random.UniformRandom(offset=0, scale=0.01)]
                                    )
 
-retinal_waves=Expander(generator=ring,orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=15,speed=0.3)
+retinal_waves=ExpanderOld(generator=ring,orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=15,speed=0.3)
 zeroInput = topo.pattern.basic.Null();
 
 
@@ -196,7 +204,7 @@ topo.sim.connect('V1Complex','V1Complex',delay=0.025,name='LateralInhibitory',
                                 topo.pattern.random.UniformRandom()]),
                  nominal_bounds_template=BoundingBox(radius=0.4),
                  learning_rate=(BoundedNumber(bounds=(0.0,None),generator=
-                               ExponentialDecay(starting_value=0.2,time_constant=4000))))
+                               ExponentialDecay(starting_value=0.2,time_constant=8000))))
 
 topo.sim.schedule_command(5000,"secondStage()")
 
