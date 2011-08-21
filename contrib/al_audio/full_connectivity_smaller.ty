@@ -33,7 +33,9 @@ from topo.pattern.audio import AudioFile, LogSpectrogram
 from topo.misc.commandline import global_params as p
 p.add(
     audio_data = TimeSeriesParam(
-        default = AudioFile(seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='sounds/complex/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        default = AudioFile(filename='/disk/scratch/s0681194/Sounds/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
         doc = """The default source of audio data for the model."""),
 
     receptor_density = param.Number(
@@ -109,9 +111,9 @@ spectrogram = LogSpectrogram(
     log_base = 2,
     signal = p.audio_data, 
     min_frequency = 20, 
-    max_frequency = 20000, 
+    max_frequency = 10000, 
     min_latency = 0, 
-    max_latency = 100, 
+    max_latency = 50, 
     windowing_function = hanning, 
     scale = p.scale )
 
@@ -198,7 +200,7 @@ strf = pattern.SigmoidedDoLG(
 topo.sim.connect('Receptor', 'Subcortical',
     name = 'ReceptorAfferent',
     delay = 0.05,
-    strength = 15.0,
+    strength = 0.04,
     connection_type = projection.SharedWeightCFProjection,
     nominal_bounds_template = sheet.BoundingBox(points=subcortical_connection_dimensions),
     weights_generator = strf )

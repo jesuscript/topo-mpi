@@ -3,14 +3,15 @@ Test script for a simple auditory system using GCAL without the GC.
 Paramater callibration is almost identical to the visual GCAL model, with a few tweaks to the subcortical to cortex
 projection strength.
 
-This version employs a gaussian cloud projection from the subcortical region to the cortical region.
+This version employs full connectivity from the subcortical region to the cortical region (i.e. an All to All projection).
 """
+
 
 __version__='$Revision: 11483 $'
 
 import param
 
-from topo import learningfn, transferfn, pattern, projection, responsefn, sheet
+from topo import learningfn, transferfn, pattern, projection, responsefn, sheet, numbergen
 
 import topo.learningfn.optimized
 import topo.learningfn.projfn 
@@ -23,7 +24,7 @@ import topo.sheet.optimized
 import topo.transferfn.misc
 
 from numpy import hanning
-from topo.pattern.basic import TimeSeriesParam
+from topo.pattern.basic import TimeSeriesParam, Line
 from topo.pattern.audio import AudioFile, LogSpectrogram
 
 
@@ -32,7 +33,6 @@ from topo.pattern.audio import AudioFile, LogSpectrogram
 from topo.misc.commandline import global_params as p
 p.add(
     audio_data = TimeSeriesParam(
-        default = AudioFile(seconds_per_iteration=0.001, interval_length=0.2), 
         doc = """The default source of audio data for the model."""),
 
     receptor_density = param.Number(
@@ -56,7 +56,7 @@ p.add(
         doc = """Amplitude of the input patterns"""),
 
     afferent_strength = param.Number(
-        default = 5.0,
+        default = 15.0, #5.6,
         bounds = (0.0, None), 
         doc = """Overall strength of the afferent projection to the cortex."""),
 
@@ -104,15 +104,22 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
-spectrogram = LogSpectrogram(
-    log_base = 2,
-    signal = p.audio_data, 
-    min_frequency = 20, 
-    max_frequency = 20000, 
-    min_latency = 0, 
-    max_latency = 100, 
-    windowing_function = hanning, 
-    scale = p.scale )
+spectrogram = Line(
+	thickness = 0.02,
+	smoothing = 0.0,
+    y = numbergen.UniformRandom(lbound = -0.5, ubound = 0.5),
+    scale = numbergen.UniformRandom(lbound = 0.0, ubound = 1.0) )
+	
+
+#spectrogram = LogSpectrogram(
+#    log_base = 2,
+#    signal = p.audio_data, 
+#    min_frequency = 20, 
+#    max_frequency = 20000, 
+#    min_latency = 0, 
+#    max_latency = 100, 
+#    windowing_function = hanning, 
+#    scale = p.scale )
 
 
 
@@ -197,7 +204,7 @@ strf = pattern.SigmoidedDoLG(
 topo.sim.connect('Receptor', 'Subcortical',
     name = 'ReceptorAfferent',
     delay = 0.05,
-    strength = 15.0,
+    strength = 15.0, #0.04,
     connection_type = projection.SharedWeightCFProjection,
     nominal_bounds_template = sheet.BoundingBox(points=subcortical_connection_dimensions),
     weights_generator = strf )
@@ -216,7 +223,7 @@ topo.sim.connect('Subcortical', 'Cortex',
     connection_type = projection.CFProjection,
     learning_rate = p.afferent_lr,
     nominal_bounds_template = sheet.BoundingBox(points=cortical_connection_dimensions),
-    weights_generator = pattern.random.GaussianCloud(gaussian_size=2*0.27083),
+    weights_generator=pattern.random.UniformRandom(),
     learning_fn = learningfn.optimized.CFPLF_Hebbian_opt() )
                      
 
