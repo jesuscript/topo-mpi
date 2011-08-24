@@ -3,15 +3,14 @@ Test script for a simple auditory system using GCAL without the GC.
 Paramater callibration is almost identical to the visual GCAL model, with a few tweaks to the subcortical to cortex
 projection strength.
 
-This version employs full connectivity from the subcortical region to the cortical region (i.e. an All to All projection).
+This version employs a gaussian cloud projection from the subcortical region to the cortical region.
 """
-
 
 __version__='$Revision: 11483 $'
 
 import param
 
-from topo import learningfn, transferfn, pattern, projection, responsefn, sheet, numbergen
+from topo import learningfn, transferfn, pattern, projection, responsefn, sheet
 
 import topo.learningfn.optimized
 import topo.learningfn.projfn 
@@ -24,7 +23,7 @@ import topo.sheet.optimized
 import topo.transferfn.misc
 
 from numpy import hanning
-from topo.pattern.basic import TimeSeriesParam, Line
+from topo.pattern.basic import TimeSeriesParam
 from topo.pattern.audio import AudioFile, LogSpectrogram
 
 
@@ -33,6 +32,10 @@ from topo.pattern.audio import AudioFile, LogSpectrogram
 from topo.misc.commandline import global_params as p
 p.add(
     audio_data = TimeSeriesParam(
+        #default = AudioFile(filename='sounds/complex/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        default = AudioFile(filename='sounds/complex/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
         doc = """The default source of audio data for the model."""),
 
     receptor_density = param.Number(
@@ -51,12 +54,12 @@ p.add(
         doc = """The nominal_density to use for the cortex sheet."""),
 
     scale = param.Number(
-        default = 0.002,
+        default = 0.01, # for file crowd.wav
         inclusive_bounds = (False, True),
         doc = """Amplitude of the input patterns"""),
 
     afferent_strength = param.Number(
-        default = 15.0, #5.6,
+        default = 15.0, #5.0,
         bounds = (0.0, None), 
         doc = """Overall strength of the afferent projection to the cortex."""),
 
@@ -88,6 +91,7 @@ p.add(
 
 
 ### Specify weight initialization, response function, and learning function
+projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
 projection.CFProjection.response_fn = responsefn.optimized.CFPRF_DotProduct_opt()
 projection.CFProjection.learning_fn = learningfn.optimized.CFPLF_Hebbian_opt()
 projection.CFProjection.weights_output_fns = [transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
@@ -104,22 +108,15 @@ We can't get anywhere near this with the ubiquitous audio sample rate of 44,100H
 the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
 """
 
-spectrogram = Line(
-	thickness = 0.02,
-	smoothing = 0.0,
-    y = numbergen.UniformRandom(lbound = -0.5, ubound = 0.5),
-    scale = numbergen.UniformRandom(lbound = 0.0, ubound = 1.0) )
-	
-
-#spectrogram = LogSpectrogram(
-#    log_base = 2,
-#    signal = p.audio_data, 
-#    min_frequency = 20, 
-#    max_frequency = 20000, 
-#    min_latency = 0, 
-#    max_latency = 100, 
-#    windowing_function = hanning, 
-#    scale = p.scale )
+spectrogram = LogSpectrogram(
+    log_base = 2,
+    signal = p.audio_data, 
+    min_frequency = 20, 
+    max_frequency = 20000, 
+    min_latency = 0, 
+    max_latency = 100, 
+    windowing_function = hanning, 
+    scale = p.scale )
 
 
 
@@ -140,11 +137,11 @@ topo.sim['Receptor'] = sheet.GeneratorSheet(
 
 subcortical_connection_size = (0.35, 0.1) # 35 msecs, 1 octave
 
-#subcortical_size = (
-#    receptor_size[0]-subcortical_connection_size[0], 
-#    receptor_size[1]-subcortical_connection_size[1] )
+subcortical_size = (
+    receptor_size[0]-subcortical_connection_size[1], 
+    receptor_size[1] )
 
-subcortical_size = (receptor_size[0], receptor_size[1])
+#subcortical_size = (receptor_size[0], receptor_size[1])
 
 subcortical_dimensions = (
     (-subcortical_size[0]/2, -subcortical_size[1]/2), 
@@ -183,28 +180,28 @@ topo.sim['Cortex'] = sheet.lissom.LISSOM(
 subcortical_connection_dimensions = (
     (-subcortical_connection_size[0]/2, -subcortical_connection_size[1]/2), 
     (subcortical_connection_size[0]/2, subcortical_connection_size[1]/2) )
-    
-    
+
+
 strf = pattern.SigmoidedDoLG(
-    x = -0.1,
-    sigmoid_slope = 50.0, 
-    sigmoid_position = 0.05, 
-    positive_aspect_ratio = 0.5,
-    positive_scale = 5.0, 
-    positive_size = 0.5, 
-    positive_x_shape = 0.8, 
-    positive_y_shape = 0.35,
-    negative_aspect_ratio = 0.3, 
-    negative_scale = 1.0, 
-    negative_size = 0.8, 
-    negative_x_shape = 0.8, 
-    negative_y_shape = 0.35 )
+     negative_aspect_ratio = 0.3,
+     negative_scale = 0.5,
+     negative_size = 0.8,
+     negative_x_shape = 0.8,
+     negative_y_shape = 0.35,
+     positive_aspect_ratio = 0.4,
+     positive_scale = 3.0,
+     positive_size = 0.5, 
+     positive_x_shape = 0.8, 
+     positive_y_shape = 0.35,
+     sigmoid_position = 0.015, 
+     sigmoid_slope = 50.0,
+     size = 1.0 )
 
 
 topo.sim.connect('Receptor', 'Subcortical',
     name = 'ReceptorAfferent',
     delay = 0.05,
-    strength = 15.0, #0.04,
+    strength = 3.0, #0.04,
     connection_type = projection.SharedWeightCFProjection,
     nominal_bounds_template = sheet.BoundingBox(points=subcortical_connection_dimensions),
     weights_generator = strf )
@@ -223,7 +220,7 @@ topo.sim.connect('Subcortical', 'Cortex',
     connection_type = projection.CFProjection,
     learning_rate = p.afferent_lr,
     nominal_bounds_template = sheet.BoundingBox(points=cortical_connection_dimensions),
-    weights_generator=pattern.random.UniformRandom(),
+    weights_generator = pattern.random.GaussianCloud(gaussian_size=2*0.27083),
     learning_fn = learningfn.optimized.CFPLF_Hebbian_opt() )
                      
 

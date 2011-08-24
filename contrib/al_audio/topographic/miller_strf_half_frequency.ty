@@ -1,0 +1,244 @@
+"""
+Test script for a simple auditory system using GCAL without the GC.
+Paramater callibration is almost identical to the visual GCAL model, with a few tweaks to the subcortical to cortex
+projection strength.
+
+This version employs a gaussian cloud projection from the subcortical region to the cortical region.
+"""
+
+__version__='$Revision: 11483 $'
+
+import param
+
+from topo import learningfn, transferfn, pattern, projection, responsefn, sheet
+
+import topo.learningfn.optimized
+import topo.learningfn.projfn 
+import topo.transferfn.optimized 
+import topo.pattern.random
+import topo.pattern.image
+import topo.responsefn.optimized 
+import topo.sheet.lissom
+import topo.sheet.optimized
+import topo.transferfn.misc
+
+from numpy import hanning
+from topo.pattern.basic import TimeSeriesParam
+from topo.pattern.audio import AudioFile, LogSpectrogram
+
+
+
+# Parameters that can be passed on the command line using -p
+from topo.misc.commandline import global_params as p
+p.add(
+    audio_data = TimeSeriesParam(
+        #default = AudioFile(filename='sounds/complex/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        default = AudioFile(filename='sounds/complex/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        doc = """The default source of audio data for the model."""),
+
+    receptor_density = param.Number(
+        default = 100.0,
+        bounds = (0.0, None), 
+        doc = """The nominal_density to use for the receptor."""),
+
+    subcortical_density = param.Number(
+        default = 50.0, 
+        bounds = (0.0, None),         
+        doc = """The nominal_density to use for the sub cortical sheet."""),
+
+    cortex_density = param.Number(
+        default = 50.0, 
+        bounds = (0.0, None), 
+        doc = """The nominal_density to use for the cortex sheet."""),
+
+    scale = param.Number(
+        default = 0.01, # for file crowd.wav
+        inclusive_bounds = (False, True),
+        doc = """Amplitude of the input patterns"""),
+
+    afferent_strength = param.Number(
+        default = 15.0, #5.0,
+        bounds = (0.0, None), 
+        doc = """Overall strength of the afferent projection to the cortex."""),
+
+    excitatory_strength = param.Number(
+        default = 1.7,
+        bounds = (0.0, None), 
+        doc = """Overall strength of the lateral excitatory projection to the cortex."""),
+
+    inhibitory_strength = param.Number(
+        default = 1.4,
+        bounds = (0.0,None), 
+        doc = """Overall strength of the lateral inhibitory projection to the cortex."""),
+
+    afferent_lr = param.Number(
+        default = 0.1,
+        bounds = (0.0, None), 
+        doc = """Learning rate for the afferent projection to the cortex."""),
+
+    excitatory_lr = param.Number(
+        default = 0.0,
+        bounds = (0.0, None), 
+        doc = """Learning rate for the lateral excitatory projection to the cortex."""),
+
+    inhibitory_lr = param.Number(
+        default = 0.3,
+        bounds = (0.0, None), 
+        doc = """Learning rate for the lateral inhibitory projection to the cortex.""") )
+
+
+
+### Specify weight initialization, response function, and learning function
+projection.CFProjection.response_fn = responsefn.optimized.CFPRF_DotProduct_opt()
+projection.CFProjection.learning_fn = learningfn.optimized.CFPLF_Hebbian_opt()
+projection.CFProjection.weights_output_fns = [transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
+projection.SharedWeightCFProjection.response_fn = responsefn.optimized.CFPRF_DotProduct_opt()
+
+
+
+### Audio pattern generator
+"""
+All STRFs employed come from the domestic cat. Audible frequency range of the  cat is in fact 48-85,000Hz. 
+(Hearing range of the domestic cat, Hearing Research 19, p85-88, 1985, R.Heffner, H.Heffner)
+
+We can't get anywhere near this with the ubiquitous audio sample rate of 44,100Hz, which spans 
+the range 0-22,050Hz, so we confine to the human audible range 20-20,000Hz.
+"""
+
+spectrogram = LogSpectrogram(
+    log_base = 2,
+    signal = p.audio_data, 
+    min_frequency = 20, 
+    max_frequency = 10000, 
+    min_latency = 0, 
+    max_latency = 100, 
+    windowing_function = hanning, 
+    scale = p.scale )
+
+
+
+### Sheets
+receptor_size = (1.0, 1.0) # 100 msecs, 100 frequency bins (10 octaves)
+
+receptor_dimensions = (
+    (-receptor_size[0]/2, -receptor_size[1]/2), 
+    (receptor_size[0]/2, receptor_size[1]/2) )
+
+topo.sim['Receptor'] = sheet.GeneratorSheet(
+    nominal_density = p.receptor_density,
+    nominal_bounds = sheet.BoundingBox(points=receptor_dimensions),
+    input_generator = spectrogram, 
+    period = 1.0, 
+    phase = 0.05 )
+
+
+subcortical_connection_size = (0.35, 0.1) # 35 msecs, 1 octave
+
+#subcortical_size = (
+#    receptor_size[0]-subcortical_connection_size[0], 
+#    receptor_size[1]-subcortical_connection_size[1] )
+
+subcortical_size = (receptor_size[0], receptor_size[1])
+
+subcortical_dimensions = (
+    (-subcortical_size[0]/2, -subcortical_size[1]/2), 
+    (subcortical_size[0]/2, subcortical_size[1]/2) )
+
+topo.sim['Subcortical'] = sheet.optimized.LISSOM_Opt(
+    nominal_density = p.subcortical_density,
+    nominal_bounds = sheet.BoundingBox(points=subcortical_dimensions),
+    output_fns = [transferfn.misc.HalfRectify()],
+    tsettle = 2,
+    strict_tsettle = 1,
+    measure_maps = False )
+
+
+cortex_connection_size = (0.0, 0.0)
+
+cortex_size = (
+    subcortical_size[0]-cortex_connection_size[0], 
+    subcortical_size[1]-cortex_connection_size[1] )
+
+cortex_dimensions = (
+    (-cortex_size[0]/2, -cortex_size[1]/2), 
+    (cortex_size[0]/2, cortex_size[1]/2) )
+
+topo.sim['Cortex'] = sheet.lissom.LISSOM(
+    nominal_density = p.cortex_density,
+    nominal_bounds = sheet.BoundingBox(points=cortex_dimensions),
+    tsettle = 16, 
+    plastic = True, 
+    output_fns = [transferfn.misc.HomeostaticResponse()] )
+
+
+
+### Connections
+"""SigmoidedDoLG pattern, MGBv STRF calibrated by eye to fit Miller et al. (2002) Figure 1."""
+subcortical_connection_dimensions = (
+    (-subcortical_connection_size[0]/2, -subcortical_connection_size[1]/2), 
+    (subcortical_connection_size[0]/2, subcortical_connection_size[1]/2) )
+    
+    
+strf = pattern.SigmoidedDoLG(
+     negative_aspect_ratio = 0.3,
+     negative_scale = 3.0,
+     negative_size = 0.8,
+     negative_x_shape = 0.8,
+     negative_y_shape = 0.35,
+     positive_aspect_ratio = 0.4,
+     positive_scale = 20.0,
+     positive_size = 0.5, 
+     positive_x_shape = 0.8, 
+     positive_y_shape = 0.35,
+     sigmoid_position = 0.05, 
+     sigmoid_slope = 50.0,
+     size = 1.0 )
+
+
+topo.sim.connect('Receptor', 'Subcortical',
+    name = 'ReceptorAfferent',
+    delay = 0.05,
+    strength = 15, #0.04,
+    connection_type = projection.SharedWeightCFProjection,
+    nominal_bounds_template = sheet.BoundingBox(points=subcortical_connection_dimensions),
+    weights_generator = strf )
+
+
+
+cortical_connection_dimensions = (
+    (-subcortical_size[0], -subcortical_size[1]), 
+    (subcortical_size[0], subcortical_size[1]) )
+
+
+topo.sim.connect('Subcortical', 'Cortex',
+    name = 'SubcorticalAfferent',
+    delay = 0.05,
+    strength = p.afferent_strength,
+    connection_type = projection.CFProjection,
+    learning_rate = p.afferent_lr,
+    nominal_bounds_template = sheet.BoundingBox(points=cortical_connection_dimensions),
+    weights_generator = pattern.random.GaussianCloud(gaussian_size=2*0.27083),
+    learning_fn = learningfn.optimized.CFPLF_Hebbian_opt() )
+                     
+
+topo.sim.connect('Cortex', 'Cortex',
+    name = 'LateralExcitatory',
+    delay = 0.05,
+    strength = p.excitatory_strength,
+    connection_type = projection.CFProjection,
+    learning_rate = p.excitatory_lr,
+    nominal_bounds_template = sheet.BoundingBox(radius=0.104),
+    weights_generator = pattern.Gaussian(aspect_ratio=1.0, size=0.05) )
+
+
+topo.sim.connect('Cortex', 'Cortex',
+    name = 'LateralInhibitory',
+    delay = 0.05,
+    strength = -1.0 * p.inhibitory_strength,
+    connection_type = projection.CFProjection, 
+    learning_rate = p.inhibitory_lr,
+    nominal_bounds_template = sheet.BoundingBox(radius=0.22917),
+    weights_generator = pattern.random.GaussianCloud(gaussian_size=0.15) )
+

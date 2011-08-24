@@ -33,9 +33,9 @@ from topo.pattern.audio import AudioFile, LogSpectrogram
 from topo.misc.commandline import global_params as p
 p.add(
     audio_data = TimeSeriesParam(
-        #default = AudioFile(filename='sounds/complex/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        default = AudioFile(filename='sounds/complex/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
         #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/twilight_section.wav', seconds_per_iteration=0.001, interval_length=0.2), 
-        default = AudioFile(filename='/disk/scratch/s0681194/Sounds/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
+        #default = AudioFile(filename='/disk/scratch/s0681194/Sounds/crowd.wav', seconds_per_iteration=0.001, interval_length=0.2), 
         doc = """The default source of audio data for the model."""),
 
     receptor_density = param.Number(
@@ -59,13 +59,13 @@ p.add(
         doc = """Amplitude of the input patterns"""),
 
     afferent_strength = param.Number(
-        default = 5.6,
+        default = 15.0, #5.6,
         bounds = (0.0, None), 
         doc = """Overall strength of the afferent projection to the cortex."""),
 
     excitatory_strength = param.Number(
         default = 1.7,
-        bounds = (0.0, None), 
+        bounds = (0.0, None),
         doc = """Overall strength of the lateral excitatory projection to the cortex."""),
 
     inhibitory_strength = param.Number(
@@ -182,25 +182,25 @@ subcortical_connection_dimensions = (
     
     
 strf = pattern.SigmoidedDoLG(
-    x = -0.1,
-    sigmoid_slope = 50.0, 
-    sigmoid_position = 0.05, 
-    positive_aspect_ratio = 0.5,
-    positive_scale = 5.0, 
-    positive_size = 0.5, 
-    positive_x_shape = 0.8, 
-    positive_y_shape = 0.35,
-    negative_aspect_ratio = 0.3, 
-    negative_scale = 1.0, 
-    negative_size = 0.8, 
-    negative_x_shape = 0.8, 
-    negative_y_shape = 0.35 )
+     negative_aspect_ratio = 0.3,
+     negative_scale = 0.5,
+     negative_size = 0.8,
+     negative_x_shape = 0.8,
+     negative_y_shape = 0.35,
+     positive_aspect_ratio = 0.4,
+     positive_scale = 3.0,
+     positive_size = 0.5, 
+     positive_x_shape = 0.8, 
+     positive_y_shape = 0.35,
+     sigmoid_position = 0.015, 
+     sigmoid_slope = 50.0,
+     size = 1.0 )
 
 
 topo.sim.connect('Receptor', 'Subcortical',
     name = 'ReceptorAfferent',
     delay = 0.05,
-    strength = 0.04,
+    strength = 15.0, #0.04
     connection_type = projection.SharedWeightCFProjection,
     nominal_bounds_template = sheet.BoundingBox(points=subcortical_connection_dimensions),
     weights_generator = strf )

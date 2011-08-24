@@ -181,19 +181,19 @@ subcortical_connection_dimensions = (
     
     
 strf = pattern.SigmoidedDoLG(
-    x = -0.1,
-    sigmoid_slope = 50.0, 
-    sigmoid_position = 0.05, 
-    positive_aspect_ratio = 0.5,
-    positive_scale = 5.0, 
-    positive_size = 0.5, 
-    positive_x_shape = 0.8, 
-    positive_y_shape = 0.35,
-    negative_aspect_ratio = 0.3, 
-    negative_scale = 1.0, 
-    negative_size = 0.8, 
-    negative_x_shape = 0.8, 
-    negative_y_shape = 0.35 )
+     negative_aspect_ratio = 0.3,
+     negative_scale = 0.5,
+     negative_size = 0.8,
+     negative_x_shape = 0.8,
+     negative_y_shape = 0.35,
+     positive_aspect_ratio = 0.4,
+     positive_scale = 3.0,
+     positive_size = 0.5, 
+     positive_x_shape = 0.8, 
+     positive_y_shape = 0.35,
+     sigmoid_position = 0.015, 
+     sigmoid_slope = 50.0,
+     size = 1.0 )
 
 
 topo.sim.connect('Receptor', 'Subcortical',
