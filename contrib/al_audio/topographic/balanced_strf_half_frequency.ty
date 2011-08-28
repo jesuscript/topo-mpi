@@ -90,7 +90,6 @@ p.add(
 
 
 ### Specify weight initialization, response function, and learning function
-projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
 projection.CFProjection.response_fn = responsefn.optimized.CFPRF_DotProduct_opt()
 projection.CFProjection.learning_fn = learningfn.optimized.CFPLF_Hebbian_opt()
 projection.CFProjection.weights_output_fns = [transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
