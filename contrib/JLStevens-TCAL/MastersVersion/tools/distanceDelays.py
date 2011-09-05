@@ -36,7 +36,6 @@ def pickleGCALWeight():
 
 def weightsFromGCALtoTCAL():
     " Loads GCAL connectivity from pickle file into current V1 sheet "
-    # os.path.join(os.getcwd(), 'GCALweights.pickle')
 
     path = os.path.join(topo.param.normalize_path(),'GCALweights.pickle')
     pickleFile = open(path,'r'); pickleObj = pickle.load(pickleFile); pickleFile.close()

@@ -10,7 +10,7 @@ from LGNOnSamplesFile import LGNOnSamples
 
 from models.modelUtils.VSDUtils import createVSDLayer
 
-from copyWeights import unpickleWeightV1
+from distanceDelays import weightsFromGCALtoTCAL
 
 ############################
 # PROFILE FOR THE STIMULUS #
@@ -165,7 +165,7 @@ def getResponse(model, settings, presentTY=None):
         model(**settings())
         # Unpickling organised GCAL weights
         print "\n**Unpickling stored GCAL connections**\n"
-        unpickleWeightV1()
+        weightsFromGCALtoTCAL()
 
         # Creating the VSD layers as necessary
         if ('VSDLayer' in sheetNames) or ('VSDSignal' in sheetNames): createVSDLayer(0.2, settings)
