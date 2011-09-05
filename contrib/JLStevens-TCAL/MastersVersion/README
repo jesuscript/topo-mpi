@@ -1,0 +1,7 @@
+README
+-------
+
+- For plotting from the minimal ty file, topographica must be run from the topographica root directory containing contrib/JLStevens-TCAL/TCAL.ty
+- The weight.pickle file needs to be generated and put in /home/topographica or more specifically, the path given by normalize_path().
+- The instructions for making the weights pickle file are in contrib/JLStevens/distanceDelays.py
+

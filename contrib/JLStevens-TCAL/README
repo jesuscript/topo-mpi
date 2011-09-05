@@ -1,0 +1,43 @@
+README
+-------
+
+Run TCAL.ty standalone
+-----------------------
+
+- Make sure the weights.pickle is in the path given by normalize_path().
+- If not, the instructions on how to make weights.pickle are in contrib/JLStevens/distanceDelays.py
+- In short, load GCAL, train for 10,000 iterations on default settings and then run pickleGCALWeight() in distanceDelays.py
+- Run ./topographica -g ./contrib/JLStevens-TCAL/MastersVersion/experimenter.py
+
+Plotting response
+------------------
+
+- Run topographica from the root directory which contains contrib/JLStevens/TCAL.ty
+- The command to use is: './topographica -g ./contrib/JLStevens-TCAL/TCAL.ty'
+- To plot the LGN response, run:
+
+data = getResponses(GCALTemporal, CALIBRATEDLGN) # Original code version...
+# *OR ALTERNATIVELY*  
+data = getResponses(GCALTemporal, CALIBRATEDLGN, presentTY='LGN')' # OR...standalone TY file version
+# Generate LGN response plot...
+import pylab; fig = tools.plotUtils.gridPlot(data, [('LGNOn', 'cal', 'peak', None)]); pylab.show()
+
+- To plot the V1 response, run:
+
+data = getResponses(GCALTemporal, CALIBRATEDV1) # Original code version...
+# *OR ALTERNATIVELY*  
+data = getResponses(GCALTemporal, CALIBRATEDV1, presentTY='V1') # OR...standalone TY file version
+# Generate V1 response plot...
+import pylab; fig = tools.plotUtils.gridPlot(data, [('V1', 'cal', 'peak', None)]); pylab.show()
+# Generate V1 peak spatial response plot
+import pylab; fig = tools.plotUtils.gridPlot(data, [('V1', 'act', 'peak', None)]); pylab.show()
+
+- To plot the VSD response, run:
+
+data = getResponses(GCALTemporal, CALIBRATEDVSD) # Original code version...
+# *OR ALTERNATIVELY*  
+data = getResponses(GCALTemporal, CALIBRATEDVSD, presentTY='VSD')  # OR...standalone TY file version
+# Generate VSD peak spatial response plot
+import pylab; fig = tools.plotUtils.gridPlot(data, [('VSDSignal', 'act', 'peak', None)]); pylab.show()
+# Generate VSD spatio-temporal response plot (found in tools/VSDPlot.py)
+makeVSDPlot(data,0)

@@ -1,0 +1,489 @@
+# ; -*- mode: Python;-*-
+import pickle, os, sys, copy
+
+import numpy
+from numpy import ones
+
+import topo
+from topo import param, learningfn,numbergen,transferfn,pattern,projection,responsefn,sheet
+from topo.sheet.basic import JointNormalizingCFSheet_Continuous
+
+from topo.transferfn.misc import HomeostaticResponse
+from topo.transferfn.basic import Hysteresis
+
+from topo.base.arrayutil import clip_lower
+
+
+#########
+# TODO  #
+#########
+        # - Version of TCAL with the delays removed.
+        #    |_ An adapted version of gcal_temporal providing function GCAL_TO_TCAL to work after 10,000 GCAL iterations in memory (no delays)
+
+if not os.path.exists(os.path.join(topo.param.normalize_path(),'GCALweights.pickle')):
+     print """\n**GCAL weights pickle file not found. Please run pickleGCALWeights() function in distanceDelays.py at interactive prompt of default GCAL model after 10,000 iterations.**\n"""
+     sys.exit()
+
+#######################################################################
+# V1 Sheet can output summed absolute subthreshold values on VSD port #
+#######################################################################
+
+class VSDContinuous(JointNormalizingCFSheet_Continuous):
+    """
+    Original Source: topographica/topo/base/projection.py
+    CFSheet that runs continuously, with no 'resting' periods between pattern presentations.
+    Extended so learning can occur with any periodicity and VSD subthreshold output available on 
+    a subthreshold port, bypassing any downstream output functions.
+    """
+
+    src_ports = ['Activity','VSD']
+    learning_period = param.Number(default=1.0,doc=""" The periodicity with which learning should occur.""")
+
+    def activate(self):
+        """
+        Collect activity from each projection, combine it to calculate
+        the activity for this sheet, and send the result out. 
+        
+        Subclasses may override this method to whatever it means to
+        calculate activity in that subclass.
+        """
+        super(VSDContinuous,self).activate()
+
+        ################################################################################################################
+        # FIXME: Would be useful if this block was factored into a method in the superclass to avoid code duplication. #
+        #        The problem is the dependence on tmp_dict which is out of scope here (belongs to superclass)          #
+        ################################################################################################################
+
+        self.activity *= 0.0; tmp_dict={}
+
+        for proj in self.in_connections:
+            if (proj.activity_group != None) | (proj.dest_port[0] != 'Activity'):
+                if not tmp_dict.has_key(proj.activity_group[0]):
+                    tmp_dict[proj.activity_group[0]]=[]
+                tmp_dict[proj.activity_group[0]].append(proj)
+
+        ################################################################################################################
+
+        keys = tmp_dict.keys()
+        keys.sort()
+        # HACK ALERT! MAY NOT WORK CORRECTLY IN GENERAL.
+        vsd_activity = self.activity.copy() * 0.0   
+        for priority in keys:
+            tmp_activity = self.activity.copy() * 0.0
+            for proj in tmp_dict[priority]:
+                vsd_activity += numpy.abs(proj.activity.copy())
+                tmp_activity += proj.activity
+            self.activity=tmp_dict[priority][0].activity_group[1](self.activity,tmp_activity)
+
+        self.send_output(src_port='VSD',data=vsd_activity)
+
+###################################################################################################
+# Original HomeostaticResponse has GCAL specific magic number preventing it from being continuous #
+###################################################################################################
+ 
+class HomeostaticResponse_Continuous(HomeostaticResponse):
+    """ Removed the GCAL magic number so that HomeostaticResponse behaves continuously """
+    def __call__(self,x):
+        if self.first_call:
+            self.first_call = False
+            if self.randomized_init:
+                self.t = ones(x.shape, x.dtype.char) * self.t_init + \
+                         (topo.pattern.random.UniformRandom() \
+                          (xdensity=x.shape[0],ydensity=x.shape[1]) \
+                          -0.5)*self.noise_magnitude*2
+            else:
+                self.t = ones(x.shape, x.dtype.char) * self.t_init
+            self.y_avg = ones(x.shape, x.dtype.char) * self.target_activity
+
+        x_orig = copy.copy(x); x -= self.t
+        clip_lower(x,0);       x *= self.linear_slope
+
+        if self.plastic: # & (float(topo.sim.time()) % 1.0 >= 0.54):
+            self.y_avg = (1.0-self.smoothing)*x + self.smoothing*self.y_avg 
+            self.t += self.learning_rate * (self.y_avg - self.target_activity)
+
+
+
+
+##############################################################################
+# Class to stop GCAL Gaussian training patterns from changing on every step  #
+##############################################################################
+
+class periodicUniformRandom(numbergen.UniformRandom):
+    " Calls UniformRandom with defined periodicity so the pattern doesn't change on every generator sheet period "
+    def __init__(self, periodicity, **args):
+        self.lastCounter = -1; self.periodicity = periodicity; self.lastValue = None
+        super(periodicUniformRandom,self).__init__(**args)
+
+    def __call__(self):
+        currentCounter = int(topo.sim.time() / self.periodicity)
+        if currentCounter != self.lastCounter:
+            self.lastCounter = currentCounter
+            self.lastValue = super(periodicUniformRandom,self).__call__()
+            return self.lastValue
+        else:
+            return self.lastValue
+
+#######################################################################################################################
+# Function to load learned GCAL weights (default parameters, trained to 10,000 iterations) from pickle file into TCAL #
+#######################################################################################################################
+
+
+from topo.base.arrayutil import DivideWithConstant
+from topo.misc.commandline import global_params as p
+from distanceDelays import makeDelayedLaterals, weightsFromGCALtoTCAL
+
+p.add(
+
+    ####################################
+    # Parameters unmodified from GCAL #
+    ###################################
+
+    num_inputs=param.Integer(default=2,bounds=(1,None),doc="""
+        How many input patterns to present per unit area at each
+        iteration, when using discrete patterns (e.g. Gaussians)."""),
+ 
+    area=param.Number(default=1.0,bounds=(0,None),
+                      inclusive_bounds=(False,True),doc="""
+        Linear size of cortical area to simulate.
+        2.0 gives a 2.0x2.0 Sheet area in V1."""),
+        
+    retina_density=param.Number(default=24.0,bounds=(0,None),
+                                inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for the retina."""),
+        
+    lgn_density=param.Number(default=24.0,bounds=(0,None),
+                             inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for the LGN."""),
+        
+    cortex_density=param.Number(default=48.0,bounds=(0,None),
+                                inclusive_bounds=(False,True),doc="""
+        The nominal_density to use for V1."""),
+        
+    ############################################
+    # Parameters of GCAL modified to form TCAL #
+    ############################################
+
+    scale=param.Number(default=1.0,inclusive_bounds=(False,True),doc="""
+        Brightness of the input patterns"""), # Was 0.7, now 1.0
+        
+    aff_strength=param.Number(default=8.0,bounds=(0.0,None),doc="""
+        Overall strength of the afferent projection from the LGN layers to V1."""),
+
+    exc_strength=param.Number(default=3.0,bounds=(0.0,None),doc="""
+        Overall strength of the lateral excitatory projection to V1."""),
+        
+    inh_strength=param.Number(default=12.0,bounds=(0.0,None),doc="""
+        Overall strength of the lateral inhibitory projection to V1.
+        NOTE: Positive value for strength. Multiplied by -1.0 in connection initialisation."""),
+
+    ######################################################################
+    # Parameters *implicit* in GCAL, made *explicit* in TCAL and changed #
+    ######################################################################
+
+    gc_strength=param.Number(default=11.0,bounds=(0.0,None),doc="""
+        Strength of the divisive contrast gain-control lateral connections in the LGN."""),
+
+    gc_delay=param.Number(default=35.0,bounds=(0.0,None),doc="""
+        Delay of the divisive contrast gain-control lateral connections in the LGN."""),
+
+    lgn_ffstrength=param.Number(default=0.5,bounds=(0.0,None),doc="""
+        Overall strength of the afferent projection from the Retina to the LGN layers."""),
+
+    ######################################################
+    # CALIBRATED VALUES (See Masters thesis for details) #
+    ######################################################
+    
+    # Implicit to GCAL, calibrated in TCAL
+    lgn_ffdelay=param.Number(default= 15,bounds=(0.0,None), constant=True, 
+                             doc=""" Feedforward delay from the Retina to the LGN (milliseconds)"""),
+
+    v1_ffdelay=param.Number(default= 15,bounds=(0.0,None), constant=True, 
+                            doc=""" Feedforward delay from the LGN to V1 (milliseconds)"""),
+
+    # Added to TCAL
+    distance_delay=param.Number(default=0.5,bounds=(0.0,None), constant=True, 
+                                doc=""" Delay between distance delay-ring connections in V1 laterals (milliseconds)"""),
+
+    blur_radius=param.Number(default=0.2,bounds=(0.0,None), constant=True, 
+                             doc=""" Size of the Gaussian used to blur VSDLayer into VSDSignal."""),
+
+    ###################################
+    # Free parameters *added* to TCAL #
+    ###################################
+
+    lgn_tc=param.Number(default=0.03,bounds=(0.0,None),doc="""
+        Time constant for Hysteresis in the LGN layer"""),
+
+    v1_tc=param.Number(default=0.01,bounds=(0.0,None),doc="""
+        Time constant for Hysteresis in the V1 layer"""),
+
+    ######################################################
+    # Yet to be tuned parameters in TCAL (development)   #
+    # Expect that learning rate is multiplied by         #
+    # 1/500 due to 500 steps per presentation            #
+    ######################################################
+
+    aff_lr=param.Number(default=0.1,bounds=(0.0,None),doc="""
+        Learning rate for the afferent projection to V1."""),
+        
+    exc_lr=param.Number(default=0.0,bounds=(0.0,None),doc="""
+        Learning rate for the lateral excitatory projection to V1."""),
+        
+    inh_lr=param.Number(default=0.3,bounds=(0.0,None),doc="""
+        Learning rate for the lateral inhibitory projection to V1.""")
+)
+
+
+# Parameters for flashing protocol for test (calibtation) stimuli
+stepParams = {'period':250.0, 'onsetRatio':0.01, 'offsetRatio':0.85, 'amplitude':1.0}
+
+######################################################
+######################################################
+
+#########
+# MODEL #
+#########
+
+projection.CFProjection.cf_shape=pattern.Disk(smoothing=0.0)
+projection.CFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+projection.CFProjection.learning_fn=learningfn.optimized.CFPLF_Hebbian_opt()
+projection.CFProjection.weights_output_fns=[transferfn.optimized.CFPOF_DivisiveNormalizeL1_opt()]
+projection.SharedWeightCFProjection.response_fn=responsefn.optimized.CFPRF_DotProduct_opt()
+
+################
+# RETINA SHEET #
+################
+
+# Gaussian patterns were used to train the GCAL connectivity loaded into TCAL #
+input_type=pattern.Gaussian
+total_num_inputs=int(p.num_inputs*p.area*p.area)
+inputs=[input_type(x=periodicUniformRandom(periodicity=250,lbound=-(p.area/2.0+0.25),
+                                             ubound= (p.area/2.0+0.25),seed=12+i),
+                   y=periodicUniformRandom(periodicity=250, lbound=-(p.area/2.0+0.25),
+                                             ubound= (p.area/2.0+0.25),seed=35+i),
+                   orientation=periodicUniformRandom(periodicity=250,lbound=-pi,ubound=pi,seed=21+i),
+                   bounds=sheet.BoundingBox(radius=1.125),
+                   size=0.088388, aspect_ratio=4.66667, scale=p.scale)
+        for i in xrange(total_num_inputs)]
+
+combined_inputs = pattern.SeparatedComposite(min_separation=0,generators=inputs)
+
+topo.sim['Retina']=sheet.GeneratorSheet(nominal_density=p.retina_density,
+                                        input_generator=combined_inputs, period=0.5, phase=0.05,
+                                        nominal_bounds=sheet.BoundingBox(radius=p.area/2.0+0.25+0.375+0.5))
+
+##############
+# LGN SHEETS #
+##############
+
+# LGN has lateral connections for divisive normalization. Using continuous, joint normalising sheet + Hysteresis
+
+for s in ['LGNOn','LGNOff']:
+    topo.sim[s]=topo.sheet.JointNormalizingCFSheet_Continuous(nominal_density=p.lgn_density,
+                                                              nominal_bounds=sheet.BoundingBox(radius=p.area/2.0+0.25+0.5),
+                                                              output_fns=[Hysteresis(time_constant=p.lgn_tc), transferfn.misc.HalfRectify()], measure_maps=False)
+############
+# V1 SHEET #
+############
+
+runPeriod = 250.0; timestep = 0.5; 
+numberOfSteps = (runPeriod / timestep)
+hfactor = (1 / numberOfSteps) * (stepParams['offsetRatio'] - stepParams['onsetRatio'])
+
+# Modifying smoothing and learning rates appropriately. Note, not exact as HomeostaticResponse_Continuous is different from HomeostaticResponse
+learning_rate=0.001  * hfactor
+smoothing=0.999 # Thanks to Jan Antolick for this conversion.
+smoothing = 1 - (1 - smoothing) / hfactor
+
+topo.sim['V1'] = VSDContinuous(nominal_density=p.cortex_density,
+                               plastic=True, nominal_bounds=sheet.BoundingBox(radius=p.area/2.0),
+                               output_fns=[Hysteresis(time_constant=p.v1_tc), HomeostaticResponse_Continuous(learning_rate=learning_rate, smoothing=smoothing)])
+
+joint_norm = topo.sheet.optimized.compute_joint_norm_totals_opt
+topo.sim['V1'].joint_norm_fn= joint_norm
+
+########################################
+# PROJECTION FROM RETINA TO LGN SHEETS #
+########################################
+
+# Components of DoG weights for the LGN
+centerg   = pattern.Gaussian(size=0.07385,aspect_ratio=1.0,
+                             output_fns=[transferfn.DivisiveNormalizeL1()])
+surroundg = pattern.Gaussian(size=0.29540,aspect_ratio=1.0,
+                             output_fns=[transferfn.DivisiveNormalizeL1()])
+# DoG weights for the LGN (center surround on and off)
+on_weights = pattern.Composite(
+    generators=[centerg,surroundg],operator=numpy.subtract)
+
+off_weights = pattern.Composite(
+    generators=[surroundg,centerg],operator=numpy.subtract)
+
+topo.sim.connect(
+    'Retina','LGNOn',delay=p.lgn_ffdelay,strength=p.lgn_ffstrength,name='AfferentToLGNOn',
+    connection_type=projection.SharedWeightCFProjection,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.375),
+    weights_generator=on_weights)
+
+topo.sim.connect(
+    'Retina','LGNOff',delay=p.lgn_ffdelay,strength=p.lgn_ffstrength,name='AfferentToLGNOff',
+    connection_type=projection.SharedWeightCFProjection,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.375),
+    weights_generator=off_weights)
+
+################################
+# DIVISIVE GAIN-CONTROL IN LGN #
+################################
+
+for s in ['LGNOn','LGNOff']:
+
+    lgn_surroundg = pattern.Gaussian(size=0.25,aspect_ratio=1.0,
+                                     output_fns=[transferfn.DivisiveNormalizeL1()])
+
+    connectionParams = {'delay': p.gc_delay, 'name':'LateralGC',                       
+                        'dest_port':('Activity'), 'activity_group':(0.6,DivideWithConstant(c=0.11)),
+                        'connection_type': projection.SharedWeightCFProjection,
+                        'strength':p.gc_strength, 'weights_generator':lgn_surroundg,
+                        'nominal_bounds_template':sheet.BoundingBox(radius=0.25)}
+
+    # This is equivalent to no distance delays. Allows distance delays in LGN if desired.
+    makeDelayedLaterals(s, ('GC%s' % s), connectionParams, 1,
+                        pattern.Gaussian, {'size':0.25,'aspect_ratio':1.0,
+                                           'output_fns':[transferfn.DivisiveNormalizeL1()]} )
+
+####################################
+# PROJECTION FROM LGN SHEETS TO V1 #
+####################################
+
+topo.sim.connect(
+    'LGNOn','V1',delay=p.v1_ffdelay,strength=p.aff_strength,name='LGNOnAfferent',
+    dest_port=('Activity','JointNormalize','Afferent'),
+    connection_type=projection.CFProjection,learning_rate=p.aff_lr,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.27083),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083),
+    learning_fn=learningfn.optimized.CFPLF_Hebbian_opt())
+                     
+topo.sim.connect(
+    'LGNOff','V1',delay=p.v1_ffdelay,strength=p.aff_strength,name='LGNOffAfferent',
+    dest_port=('Activity','JointNormalize','Afferent'),
+    connection_type=projection.CFProjection,learning_rate=p.aff_lr,
+    nominal_bounds_template=sheet.BoundingBox(radius=0.27083),
+    weights_generator=pattern.random.GaussianCloud(gaussian_size=2*0.27083),
+    learning_fn=learningfn.optimized.CFPLF_Hebbian_opt())
+
+
+###########################################################
+# V1 LATERAL PROJECTIONS (with distance-dependent delays) #
+###########################################################
+
+# GCAL VERSION FOR COMPARISON 
+
+# topo.sim.connect(
+#     'V1','V1',delay=0.05,strength=-1.0*p.inh_strength,name='LateralInhibitory',
+#     connection_type=projection.CFProjection,learning_rate=p.inh_lr,
+#     nominal_bounds_template=sheet.BoundingBox(radius=0.22917),
+#     weights_generator=pattern.random.GaussianCloud(gaussian_size=0.15))
+
+# topo.sim.connect(
+#     'V1','V1',delay=0.05,strength=p.exc_strength,name='LateralExcitatory',
+#     connection_type=projection.CFProjection,learning_rate=p.exc_lr,
+#     nominal_bounds_template=sheet.BoundingBox(radius=0.104),
+#     weights_generator=pattern.Gaussian(aspect_ratio=1.0, size=0.05))
+
+
+V1ExcParams = {'delay':0.05, 'strength':p.exc_strength, 'name':'LateralExcitatory',
+               'connection_type':projection.CFProjection, 'learning_rate':p.exc_lr,
+               'nominal_bounds_template':sheet.BoundingBox(radius=0.104),
+               'weights_generator':pattern.Gaussian(aspect_ratio=1.0, size=0.05)}
+
+makeDelayedLaterals('V1', 'LateralExcitatory', V1ExcParams, 'MAX',
+                    pattern.Gaussian, {'aspect_ratio':1.0, 'size':0.05})
+  
+V1InhParams = {'delay':0.05, 'strength':-1.0*p.inh_strength, 'name':'LateralInhibitory',
+               'connection_type':projection.CFProjection,'learning_rate':p.inh_lr,
+               'nominal_bounds_template':sheet.BoundingBox(radius=0.22917),
+               'weights_generator':pattern.random.GaussianCloud(gaussian_size=0.15)}
+
+makeDelayedLaterals('V1', 'LateralInhibitory' , V1InhParams, 'MAX',
+                    pattern.random.GaussianCloud, {'gaussian_size':0.15})
+
+#########################################
+# Setting the distance dependent delays #
+#########################################
+
+connections = dict([(el.name,el) for el in topo.sim.connections()])
+
+for (ind,excName) in enumerate(['LateralExcitatory-%d'% i for i in range(4)]):
+     excDelay = (ind+1) * p.distance_delay # Zero-delays are bad hence the +1
+     connections[excName].delay = excDelay
+
+for (ind,inhName) in enumerate(['LateralInhibitory-%d'% i for i in range(11)]):
+     inhDelay = (ind+1) * p.distance_delay # Zero-delays are bad hence the +1
+     connections[inhName].delay = inhDelay
+
+####################################
+# LOAD ORGANISED GCAL CONNECTIVITY #
+####################################
+
+weightsFromGCALtoTCAL()
+
+####################
+# SIMPLE VSD MODEL #
+####################
+
+# Declare both sheets to match V1 density and bounds.
+
+topo.sim['VSDLayer'] = topo.sheet.CFSheet(nominal_density=topo.sim['V1'].nominal_density,
+                                          nominal_bounds= topo.sim['V1'].nominal_bounds)
+
+topo.sim['VSDSignal'] = topo.sheet.CFSheet(nominal_density =topo.sim['V1'].nominal_density,
+                                           nominal_bounds= topo.sim['V1'].nominal_bounds)
+
+# Project VSD activity from V1 to VSDLayer
+
+topo.sim.connect('V1','VSDLayer', src_port='VSD', name='V1ToVSDLayer',
+                 connection_type=topo.projection.OneToOneProjection, delay=0.001)
+
+# Make Gaussian blurring projection from VSDLayer to VSDSignal
+
+scaleFactor = 0.3 # A Gaussian of size 0.3 will roughly fit into a rectangle of size 1
+blurringPattern  = topo.pattern.Gaussian(size=p.blur_radius*scaleFactor, aspect_ratio=1.0,
+                                         output_fns=[topo.transferfn.DivisiveNormalizeL1()])
+
+topo.sim.connect('VSDLayer', 'VSDSignal', name='VSDLayerToSignal', delay=0.001, strength=1.0,
+                 connection_type=topo.projection.SharedWeightCFProjection, 
+                 nominal_bounds_template=topo.sheet.BoundingBox(radius=p.blur_radius), weights_generator=blurringPattern)
+
+
+############################
+# CALIBRATION TEST STIMULI #
+# ##########################
+
+def makeIntoStepPattern(pattern, period=1.0, onsetRatio=0.33,offsetRatio=0.66, amplitude=1.0):
+
+    def stepModulator(): 
+        remainder = float(topo.sim.time()) % period 
+        
+        if remainder < onsetRatio*period: return 0.0
+        if remainder < offsetRatio*period: return amplitude
+        else: return 0.0
+
+    pattern.scale = stepModulator
+    return pattern
+
+
+def presentLGNCalibrationPattern():
+     testPattern = pattern.Disk(size=0.07385, smoothing=0.0)
+     testPattern = makeIntoStepPattern(testPattern, **stepParams)
+     topo.command.basic.pattern_present({'Retina':testPattern}, duration=250.0)
+
+def presentV1CalibrationPattern():
+     testPattern = pattern.SineGrating(frequency=2.9, mask_shape=topo.pattern.Disk(size=0.7, smoothing=0.0))
+     testPattern = makeIntoStepPattern(testPattern, **stepParams)
+     topo.command.basic.pattern_present({'Retina':testPattern}, duration=250.0)
+
+def presentVSDCalibrationPattern():
+     testPattern = pattern.Gabor(size=0.1)
+     testPattern = makeIntoStepPattern(testPattern, **stepParams)
+     topo.command.basic.pattern_present({'Retina':testPattern}, duration=250.0)
+
