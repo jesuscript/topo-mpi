@@ -124,36 +124,14 @@ def boundsChanged(bounds, sheetName, connName, center_row, center_col):
     
     return (ringBounds.lbrt() != bounds.lbrt())
 
-def writeBoundsToFile(sheetName, connName, connectionParams, wPatternClass, wPatternParams, center_row,center_col):
-    
-    (bounds, weights) = originalBoundsWeights(sheetName, connName, connectionParams, 
-                                              wPatternClass, wPatternParams, center_row,center_col)
-
-    boundsFileName = '%s.pickle' % connName
-    boundsFile = open(boundsFileName, 'w')
-    print "Writing bounds file to disk. Rerun script to get rid of dummy connections"
-    pickle.dump((bounds, weights), boundsFile)
-    boundsFile.close()
-
-    return (bounds, weights)
-
 def readBoundsWeights(sheetName, connName, connectionParams, wPatternClass, 
                       wPatternParams, center_row,center_col):
 
-    try:
-        boundsFileName = '%s.pickle' % connName
-        boundsFile = open(boundsFileName, 'r')
-        (bounds, weights) = pickle.load(boundsFile)
-        boundsFile.close()
-        print "\nBounds file '%s' loaded from disk." % boundsFileName
-        return (bounds, weights, False)
-        
-    except:
-        print "\nCould not load bounds file. Probably doesn't exist."
-        (bounds, weights) = writeBoundsToFile(sheetName, connName, connectionParams, 
+    (bounds, weights) = originalBoundsWeights(sheetName, connName, connectionParams, 
                                               wPatternClass, wPatternParams, center_row,center_col)
-        return (bounds, weights, True)
-
+    # Remove the dummy connections
+    [el.remove() for el in topo.sim.connections() if (el.name[:len('dummy')] == 'dummy')]
+    return (bounds, weights, False)
 
 def rawWeightPattern(wPatternClass, wPatternParams, bbwidth, extraParams):
 
@@ -238,7 +216,6 @@ def makeDelayedLaterals(sheetName, connName, connectionParams, ringNumber, wPatt
         
         delayName = '%s-%d' % (connName,i)
 
-
         originalWeightOutputFns = None
         if 'weights_output_fns' in connectionParams:
             originalWeightOutputFns = connectionParams['weights_output_fns'] 
@@ -254,11 +231,6 @@ def makeDelayedLaterals(sheetName, connName, connectionParams, ringNumber, wPatt
 
     # Checking to see if the bounds have changed
     boundsChangedFlag = boundsChanged(bounds, sheetName, connName, center_row, center_col)
-
-    if boundsChangedFlag:
-        print "Bounds have changed. Writing new bounds to disk and exiting."
-        writeBoundsToFile(sheetName, connName, connectionParams, 
-                          wPatternClass, wPatternParams, center_row,center_col)
 
     error = squareErrorPlots(weights, sheetName, connName, ringNumber,center_row,center_col)
     print ' Squared error in CF weights for %d rings in %s is: %f' % (ringNumber, sheetName, error)
