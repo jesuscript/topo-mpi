@@ -1,11 +1,13 @@
 README
 -------
 
+If running on DICE (eg. jupiter machines), scipy needs to be compiled. Run 'make scipy' in the external folder to do so.
+
 Run TCAL.ty standalone
 -----------------------
 
 - Make sure the weights.pickle is in the path given by normalize_path().
-- If not, the instructions on how to make weights.pickle are in contrib/JLStevens/distanceDelays.py
+- If not, the instructions on how to make GCALweights.pickle are in contrib/JLStevens/distanceDelays.py
 - In short, load GCAL, train for 10,000 iterations on default settings and then run pickleGCALWeight() in distanceDelays.py
 - Run ./topographica -g ./contrib/JLStevens-TCAL/MastersVersion/experimenter.py
 
