@@ -35,7 +35,7 @@ from topo import numbergen
 from topo.pattern.basic import Gaussian
 from topo.learningfn.projfn import CFPLF_Trace
 from topo.base.functionfamily import CoordinateMapperFn
-from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Translator,SimpleHomeoSigmoid, Jitterer, AddGC, SimpleHomeoLinear, Expander
+from contrib.jacommands import randomize_V1Simple_relative_LGN_strength,ActivityHysteresis, Translator,SimpleHomeoSigmoid, Jitterer, AddGC, SimpleHomeoLinear, Expander, LogisticLoss
 from topo.numbergen import UniformRandom, BoundedNumber, ExponentialDecay
 
 
@@ -87,17 +87,15 @@ elif dataset=="Natural":
 disk_scale=locals().get('diskscale',0.35)
 reg=locals().get('Region',1.0)
 
-ring = topo.pattern.basic.Composite(operator=numpy.add,x=numbergen.UniformRandom(lbound=-reg,ubound=reg,seed=12),
-                                                            y=numbergen.UniformRandom(lbound=-reg,ubound=reg,seed=36),
-                       generators=[topo.pattern.basic.Ring(size=0.5, aspect_ratio=1.0, scale=locals().get('RingScale',0.25),thickness=locals().get('Thickness',0.01),
-                                                            offset=0.0,
-                                                            bounds=BoundingBox(radius=2.125), smoothing=locals().get('Smoothing',0.03)),
-                                   topo.pattern.random.UniformRandom(seed=13,offset=locals().get('rand_offset',0), scale=locals().get('rand_scale',0.05))])
+ring = topo.pattern.basic.Composite(bounds=BoundingBox(radius=2*reg),operator=numpy.add,x=numbergen.UniformRandom(lbound=-reg,ubound=reg,seed=13),
+                                    y=numbergen.UniformRandom(lbound=-reg,ubound=reg,seed=26),
+                                    generators=[topo.pattern.basic.Ring(size=1.0, aspect_ratio=1.0, scale=locals().get('RingScale',0.25),thickness=locals().get('Thickness',0.01),
+                                    offset=0.0,
+                                    bounds=BoundingBox(radius=2*reg), smoothing=locals().get('Smoothing',0.03)),
+                                    topo.pattern.random.UniformRandom(seed=13,offset=locals().get('rand_offset',0), scale=locals().get('rand_scale',0.05))])
 
- 
-
-retinal_waves=Expander(generator=ring,orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=locals().get('Period',10),speed=locals().get('Speed',0.02),size=locals().get('InitRingSize',0.5))
-
+retinal_waves=Expander(bounds=BoundingBox(radius=2*reg),generator=ring,orientation=numbergen.UniformRandom(lbound=-pi,ubound=pi,seed=56),reset_period=locals().get('Period',10),speed=locals().get('Speed',0.02),size=locals().get('InitRingSize',0.5),visual_field_size=core_size+0.4)
+                                                                                                                                                                                                                                               
 zeroInput = topo.pattern.basic.Null();
 
 
@@ -140,8 +138,15 @@ else:
 
 if locals().get('COF',"Sigmoid") == "HR":
     V1Complex_OF=HalfRectify(t_init=locals().get('CTresh',0.0))
+    V1ComplexInh_OF=HalfRectify(gain=locals().get('V1CInhGain',1.0),t_init=locals().get('V1CInhTresh',0.0))
+elif locals().get('COF',"Sigmoid") == "LogLoss":    
+    V1Complex_OF=LogisticLoss(t_init=locals().get('CTresh',0.0),c=locals().get('LogLossCoef',1.0))
+    V1ComplexInh_OF=LogisticLoss(t_init=locals().get('V1CInhTresh',0.0),c=locals().get('InhLogLossCoef',1.0),a=locals().get('V1CInhGain',1.0))
+elif locals().get('COF',"Sigmoid") == "SimpleHomeoInh":    
+    V1Complex_OF=HalfRectify(t_init=locals().get('CTresh',0.0))
+    V1ComplexInh_OF= SimpleHomeoLinear(t_init=locals().get('V1CInhTresh',0.0),alpha=locals().get('CIAlpha',1.0),mu=locals().get('CIMU',0.01),eta=locals().get('CIETA',0.02))
 else:
-        V1Complex_OF=Sigmoid(r=locals().get('r_init',14.5),k=locals().get('k_init',-3))
+    V1Complex_OF=Sigmoid(r=locals().get('r_init',14.5),k=locals().get('k_init',-3))
 
 NN = PatternCombine(generator=topo.pattern.random.GaussianRandom(scale=locals().get('intrinsic_noise',0.0),offset=0.0),operator=numpy.add)
 
@@ -183,7 +188,7 @@ topo.sim['V1Complex'] = JointNormalizingCFSheet_Continuous(nominal_density=local
 
 topo.sim['V1ComplexInh'] = JointNormalizingCFSheet_Continuous(nominal_density=locals().get('default_density',96.0),
                         nominal_bounds=BoundingBox(radius=core_size),
-                        output_fns=[ActivityHysteresis(time_constant=locals().get('CTC',0.3)),HalfRectify(gain=locals().get('V1CInhGain',1.0),t_init=locals().get('V1CInhTresh',0.0))])
+                        output_fns=[ActivityHysteresis(time_constant=locals().get('CTC',0.3)),V1ComplexInh_OF])
 
 
 # DoG weights for the LGN
@@ -253,26 +258,6 @@ topo.sim.connect('LGNOff','V1Simple',delay=0.05,dest_port=('Activity','JointNorm
                  learning_rate=(BoundedNumber(bounds=(0.0,None),generator=
                                ExponentialDecay(starting_value = locals().get('S_lr',5),
                                                 time_constant=locals().get('S_tc',12000)))))
-
-
-simpleLateral  =  locals().get('SL',False)
-if simpleLateral:
-        topo.sim.connect('V1Simple','V1Simple',delay=0.05,name='LateralExcitatory',
-                        connection_type=CFProjection,strength=locals().get('SxLatExcStr',0.0),
-                        weights_generator=topo.pattern.basic.Gaussian(aspect_ratio=1.0, size=locals().get('CxLatExcSize',0.04)),
-                        nominal_bounds_template=BoundingBox(radius=locals().get('CxLatExcBB',0.12)),
-                        learning_rate=0.0)
-        
-        topo.sim.connect('V1Simple','V1Simple',delay=0.05,name='LateralInhibitory',
-                        connection_type=CFProjection,strength=-locals().get('SxLatInhStr',0.0),
-                        weights_generator=topo.pattern.basic.Composite(operator=numpy.multiply, 
-                            generators=[Gaussian(aspect_ratio=1.0, size=locals().get('CxLatInhSize',2*0.22917)),
-                                        topo.pattern.random.UniformRandom(seed=7)]),
-                        nominal_bounds_template=BoundingBox(radius=locals().get('CxLatInhBB',0.22917)),
-                        learning_rate=(BoundedNumber(bounds=(0.0,None),generator=
-                                    ExponentialDecay(starting_value = locals().get('LatInh_lr',0.3),
-                                                        time_constant=locals().get('LatInh_tc',1600)))))
-
 
 
 #V1 Complex
@@ -371,69 +356,10 @@ def secondStage():
 from topo.analysis.featureresponses import MeasureResponseCommand, FeatureMaps, SinusoidalMeasureResponseCommand, FeatureCurveCommand
 FeatureMaps.num_orientation=16
 MeasureResponseCommand.scale=1.0
-MeasureResponseCommand.duration=2.0
+MeasureResponseCommand.duration=4.0
 SinusoidalMeasureResponseCommand.frequencies=[2.4]
+SinusoidalMeasureResponseCommand.num_phase=10
 FeatureCurveCommand.num_orientation=16
-FeatureCurveCommand.curve_parameters=[{"contrast":15},{"contrast":50},{"contrast":90}]
+FeatureCurveCommand.curve_parameters=[{"contrast":15},{"contrast":90}]
 
 
-def check_activity(a,b,c,d,e,f,g,h,i,j):
-    print a,b,c,d,e,f,g,h,i,j
-
-    import pylab
-    prefix="/disk/scratch/ActivityExploration1/"
-    
-    pylab.figure(1)
-
-    V1Splastic =     topo.sim["V1Simple"].plastic
-    V1Cplastic =     topo.sim["V1Complex"].plastic
-    topo.sim["V1Simple"].plastic = False
-    topo.sim["V1Complex"].plastic = False
-    
-    topo.sim.state_push()
-   
-    #topo.sim["V1Simple"].in_connections[0].strength=a
-    #topo.sim["V1Simple"].in_connections[0].strength=a
-    
-    #topo.sim["V1Simple"].projections()["V1SimpleFeedbackExc1"].strength=b
-    #topo.sim["V1Simple"].projections()["V1SimpleFeedbackInh"].strength=c
-    topo.sim["V1Complex"].projections()["LongEE"].strength=d
-    topo.sim["V1ComplexInh"].projections()["LongEI"].strength=e
-    topo.sim["V1Complex"].projections()["LocalIE"].strength=f
-    topo.sim["V1ComplexInh"].projections()["LocalII"].strength=g
-    #topo.sim["V1Complex"].projections()["V1SimpleAfferent"].strength=h
-    topo.sim["V1Complex"].projections()["LocalEE"].strength=i
-    topo.sim["V1ComplexInh"].projections()["LocalEI"].strength=j
-
-
-    try:
-        topo.sim.run(5.0)
-        activity = topo.sim["V1Complex"].activity
-        topo.sim.run(0.3)
-        activity += topo.sim["V1Complex"].activity
-        topo.sim.run(0.3)
-        activity += topo.sim["V1Complex"].activity
-        topo.sim.run(0.3)
-        activity += topo.sim["V1Complex"].activity
-        topo.sim.run(0.3)
-        activity += topo.sim["V1Complex"].activity
-        
-        pylab.clf()
-        pylab.imshow(activity)
-        pylab.colorbar()
-        pylab.savefig(prefix+ "Activity:"  + "_" + str(a)+ "_" + str(b) + "_" + str(c) + "_" + str(d)+ "_" + str(e)  + "_" + str(f) + "_" + str(g) + "_" + str(h) + "_" + str(i) + "_" + str(j) + ".png");
-    except FloatingPointError:
-        print "Error"
-        pass
-
-    topo.sim.state_pop()
-    
-    topo.sim["V1Simple"].plastic = V1Splastic 
-    topo.sim["V1Complex"].plastic = V1Cplastic
-    
-#from topo.command.basic import wipe_out_activity, clear_event_queue
-#topo.sim.run(1.0)
-#wipe_out_activity()
-#clear_event_queue()
-
-#contrib.jacommands.run_combinations(check_activity,[[0],[0],[0],[0.1,0.2,0.3],[2.0,3.0,4.0,5.0],[-1.6,-1.4,-1.2,-1.8],[-1.2,-1.4,-1.6,-1.8],[0],[2.3,2.5,2.1],[2.3,2.5,2.1]])
