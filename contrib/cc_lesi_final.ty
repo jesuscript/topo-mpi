@@ -140,7 +140,7 @@ if locals().get('COF',"Sigmoid") == "HR":
     V1Complex_OF=HalfRectify(t_init=locals().get('CTresh',0.0))
     V1ComplexInh_OF=HalfRectify(gain=locals().get('V1CInhGain',1.0),t_init=locals().get('V1CInhTresh',0.0))
 elif locals().get('COF',"Sigmoid") == "LogLoss":    
-    V1Complex_OF=LogisticLoss(t_init=locals().get('CTresh',0.0),c=locals().get('LogLossCoef',1.0))
+    V1Complex_OF=LogisticLoss(t_init=locals().get('V1CExcTresh',0.0),c=locals().get('ExcLogLossCoef',1.0),a=locals().get('V1CExcGain',1.0))
     V1ComplexInh_OF=LogisticLoss(t_init=locals().get('V1CInhTresh',0.0),c=locals().get('InhLogLossCoef',1.0),a=locals().get('V1CInhGain',1.0))
 elif locals().get('COF',"Sigmoid") == "SimpleHomeoInh":    
     V1Complex_OF=HalfRectify(t_init=locals().get('CTresh',0.0))
