@@ -12,7 +12,7 @@ __version__ = "$Revision$"
 
 from numpy import ones,zeros
 import numpy.oldnumeric as Numeric
-from numpy.oldnumeric import Float
+from numpy.oldnumeric import Float,Float32
 
 import param
 

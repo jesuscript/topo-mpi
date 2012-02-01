@@ -15,8 +15,9 @@ from numpy import ufunc
 import param
 
 # Ask numpy to print even relatively large arrays by default
-set_printoptions(threshold=200*200)
-
+#set_printoptions(threshold=200*200)
+#KK set to zero for MPI use
+set_printoptions(threshold=0)
 
 def ufunc_script_repr(f,imports,prefix=None,settings=None):
     """

@@ -79,6 +79,7 @@ $Id$
 __version__ = '$Revision$'
 
 
+import copy
 from numpy import array,floor,ceil,round_,arange
 
 from boundingregion import BoundingBox
@@ -318,6 +319,20 @@ class SheetCoordinateSystem(object):
         rows,cols = self.shape
         return self.matrixidx2sheet(arange(rows),arange(cols))
 
+
+    def _copy_scs(self):
+        # allow separation of SCS from sheet
+        scs = object.__new__(SheetCoordinateSystem)
+        scs.bounds = copy.copy(self.bounds)
+        scs.lbrt = self.lbrt.copy()
+        
+        scs._SheetCoordinateSystem__shape=self.__shape
+        scs._SheetCoordinateSystem__xdensity=self.__xdensity
+        scs._SheetCoordinateSystem__ydensity=self.__ydensity
+        scs._SheetCoordinateSystem__xstep=self.__xstep
+        scs._SheetCoordinateSystem__ystep=self.__ystep
+
+        return scs
 
 
 

@@ -18,8 +18,7 @@ from topo.base.projection import Projection
 from topo.base.boundingregion import BoundingBox
 from topo.base.sheet import activity_type
 from topo.base.sheetcoords import Slice
-from topo.base.cf import CFProjection,ConnectionField,MaskedCFIter,\
-     CFPLearningFn,CFPLF_Identity,CFPOutputFn,CFIter,ResizableCFProjection
+from topo.base.cf import CFProjection,MPI_CFProjection, ConnectionField,MaskedCFIter, CFPLearningFn,CFPLF_Identity,CFPOutputFn,CFIter,ResizableCFProjection
 from topo.base.patterngenerator import PatternGenerator,Constant
 from topo.base.functionfamily import CoordinateMapperFn,IdentityMF
 from topo.misc.util import rowcol2idx

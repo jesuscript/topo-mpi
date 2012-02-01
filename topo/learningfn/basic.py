@@ -5,6 +5,8 @@ $Id$
 """
 __version__ = "$Revision$"
 
+from numpy.oldnumeric import ones,Float32
+
 import param
 
 from topo.base.functionfamily import LearningFn

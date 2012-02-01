@@ -9,13 +9,14 @@ $Id$
 __version__='$Revision$'
 
 
+import time
 import copy
 
-from math import pi
+from math import fmod,floor,pi
 from colorsys import hsv_to_rgb
 
 import numpy
-from numpy import zeros, empty, object_, size, vectorize, fromfunction
+from numpy import zeros, array, empty, object_, size, vectorize, fromfunction
 from numpy.oldnumeric import Float
 
 import param
@@ -27,12 +28,14 @@ from topo.base.arrayutil import wrap
 from topo.base.cf import CFSheet
 from topo.base.functionfamily import PatternDrivenAnalysis 
 from topo.base.sheet import Sheet, activity_type
+from topo.base.sheetcoords import SheetCoordinateSystem
 from topo.base.sheetview import SheetView
 from topo.command.basic import pattern_present,restore_input_generators, save_input_generators
+from topo.command.basic import wipe_out_activity, clear_event_queue
 from topo.misc.distribution import Distribution
 from topo.misc.util import cross_product, frange
 from topo import pattern
-from topo.pattern.basic import SineGrating, Gaussian, RawRectangle, Disk
+from topo.pattern.basic import SineGrating, Gaussian, RawRectangle, Disk, OrientationContrast
 from topo.plotting.plotgroup import plotgroups
 from topo.sheet import GeneratorSheet
 
@@ -63,6 +66,7 @@ class DistributionMatrix(param.Parameterized):
                                      doc="Return a Distribution instance for each element of x.")
         self.distribution_matrix = new_distribution(empty(matrix_shape))
 
+  
 
     def update(self, new_values, bin):
         """Add a new matrix of histogram values for a given bin value."""
@@ -93,7 +97,7 @@ class DistributionMatrix(param.Parameterized):
         """Return the bin with the max value of each Distribution as a matrix."""
 
         max_value_bin_matrix=zeros(self.distribution_matrix.shape,Float)
-
+            
         for i in range(len(max_value_bin_matrix)):
             for j in range(len(max_value_bin_matrix[i])):           
                 max_value_bin_matrix[i,j]=self.distribution_matrix[i,j].max_value_bin()                             
@@ -101,30 +105,7 @@ class DistributionMatrix(param.Parameterized):
         return max_value_bin_matrix
         
         
-    def second_max_value_bin(self):
-        """Return the bin with the second max value of each Distribution as a matrix."""
 
-        m	= zeros(self.distribution_matrix.shape,Float)
-            
-        for i in range( len(m) ):
-            for j in range( len(m[i]) ):           
-                m[i,j]	= self.distribution_matrix[i,j].second_max_value_bin()                             
-
-        return m
-        
-        
-    def second_peak_bin(self):
-        """Return the bin with the second peak of each Distribution as a matrix."""
-
-        m	= zeros(self.distribution_matrix.shape,Float)
-            
-        for i in range( len(m) ):
-            for j in range( len(m[i]) ):           
-                m[i,j]	= self.distribution_matrix[i,j].second_peak_bin()                             
-
-        return m
-        
-        
     def selectivity(self):
         """Return the selectivity of each Distribution as a matrix."""
 
@@ -135,32 +116,6 @@ class DistributionMatrix(param.Parameterized):
                 selectivity_matrix[i,j]=self.distribution_matrix[i,j].selectivity()
 
         return selectivity_matrix
-        
-        
-    def second_selectivity(self):
-        """
-	Return the selectivity for the second maximum response of each Distribution as a matrix.
-	"""
-        s	= zeros(self.distribution_matrix.shape,Float) 
-
-        for i in range( len(s) ):
-            for j in range( len(s[i]) ):
-                s[i,j]	= self.distribution_matrix[i,j].second_selectivity()
-
-        return s
-
-        
-    def second_peak_selectivity(self):
-        """
-	Return the selectivity for the second peak response of each Distribution as a matrix.
-	"""
-        s	= zeros(self.distribution_matrix.shape,Float) 
-
-        for i in range( len(s) ):
-            for j in range( len(s[i]) ):
-                s[i,j]	= self.distribution_matrix[i,j].second_peak_selectivity()
-
-        return s
 
 
 
@@ -251,10 +206,7 @@ class FeatureResponses(PatternDrivenAnalysis):
             self._featureresponses[sheet] = {}
             self._activities[sheet]=zeros(sheet.shape)
             for f in features:
-                # CEBERRORALERT: line below is missing at least
-                # "keep_peak=f.keep_peak". Couldn't these things be
-                # passed around in a less fragile way?
-                self._featureresponses[sheet][f.name]=DistributionMatrix(sheet.shape,axis_range=f.range,cyclic=f.cyclic) 
+                self._featureresponses[sheet][f.name]=DistributionMatrix(sheet.shape,axis_range=f.range,cyclic=f.cyclic)
             FeatureResponses._fullmatrix[sheet] = FullMatrix(sheet.shape,features)
 
     def sheets_to_measure(self):
@@ -398,7 +350,7 @@ class ReverseCorrelation(FeatureResponses):
         # here for no reason except maybe the input_sheet got changed). Would be better
         # to have the input_sheet fixed.
         self.initialize_featureresponses(features) 
-
+        
         super(ReverseCorrelation,self).measure_responses(pattern_presenter,param_dict,
                                                          features,display)
                                                          
@@ -435,8 +387,10 @@ class ReverseCorrelation(FeatureResponses):
             for ii in range(rows): 
                 for jj in range(cols):
                     self._featureresponses[sheet][ii,jj]+=sheet.activity[ii,jj]*self.input_sheet.activity
-                    
 
+
+
+                          
 class FeatureMaps(FeatureResponses):
     """
     Measures and collects the responses to a set of features for calculating feature maps.
@@ -494,7 +448,7 @@ class FeatureMaps(FeatureResponses):
         to be increased instead.
         """
         self.measure_responses(pattern_presenter,param_dict,self.features,display)    
-
+        
         for sheet in self.sheets_to_measure():
             bounding_box = sheet.bounds
             
@@ -515,36 +469,30 @@ class FeatureMaps(FeatureResponses):
                 else:
                     norm_factor = 1.0
 
-                value_offset		= [f.value_offset for f in self.features if f.name==feature]
-                value_multiplier	= [f.value_multiplier for f in self.features if f.name==feature]
-                second_response		= [f.second_response for f in self.features if f.name==feature][ 0 ]
-                second_peak		= [f.second_peak for f in self.features if f.name==feature][ 0 ]
-		fr			= self._featureresponses[sheet][feature]
+              
+                value_offset = [f.value_offset for f in self.features if f.name==feature]
+                value_multiplier = [f.value_multiplier for f in self.features if f.name==feature]
 
-                if second_response:
-                    response	= ( fr.second_max_value_bin() + value_offset ) * value_multiplier / norm_factor
-		    selectivity	= self.selectivity_multiplier * fr.second_selectivity()
-		    view_name	= self.sheet_views_prefix + "Second" + feature.capitalize()
-                elif second_peak:
-                    response	= ( fr.second_peak_bin() + value_offset ) * value_multiplier / norm_factor
-		    selectivity	= self.selectivity_multiplier * fr.second_peak_selectivity()
-		    view_name	= self.sheet_views_prefix + "SecondPeak" + feature.capitalize()
-                elif weighted_average:
-                    response	= ( fr.weighted_average() + value_offset ) * value_multiplier / norm_factor
-		    selectivity	= self.selectivity_multiplier * fr.selectivity()
-		    view_name	= self.sheet_views_prefix + feature.capitalize()
+             
+                if weighted_average:
+                    
+                    preference_map = SheetView((((self._featureresponses[sheet][feature].weighted_average())+value_offset)*value_multiplier/norm_factor,
+                                                bounding_box), sheet.name, sheet.precedence, topo.sim.time())
+
                 else:
-                    response	= ( fr.max_value_bin() + value_offset ) * value_multiplier / norm_factor
-		    selectivity	= self.selectivity_multiplier * fr.selectivity()
-		    view_name	= self.sheet_views_prefix + feature.capitalize()
-
-	        preference_map = SheetView( (response, bounding_box), sheet.name, sheet.precedence, topo.sim.time() )
+                    preference_map = SheetView((((self._featureresponses[sheet][feature].max_value_bin())+value_offset)*value_multiplier/norm_factor,
+                                                bounding_box), sheet.name, sheet.precedence, topo.sim.time())    
+               
                 preference_map.cyclic = cyclic
                 preference_map.norm_factor = norm_factor
-                sheet.sheet_views[view_name+'Preference']=preference_map
+                    
                 
-                selectivity_map = SheetView( (selectivity, bounding_box), sheet.name, sheet.precedence, topo.sim.time(), sheet.row_precedence)
-                sheet.sheet_views[view_name+'Selectivity']=selectivity_map
+                sheet.sheet_views[self.sheet_views_prefix+feature.capitalize()+'Preference']=preference_map
+                
+                selectivity_map = SheetView((self.selectivity_multiplier*
+                                             self._featureresponses[sheet][feature].selectivity(),
+                                             bounding_box), sheet.name , sheet.precedence, topo.sim.time(),sheet.row_precedence)
+                sheet.sheet_views[self.sheet_views_prefix+feature.capitalize()+'Selectivity']=selectivity_map
 
                 
 class FeatureCurves(FeatureResponses):
@@ -609,7 +557,7 @@ class Feature(object):
     Stores the parameters required for generating a map of one input feature.
     """
 
-    def __init__(self, name, range=None, step=0.0, values=None, cyclic=False, value_offset=0.0, value_multiplier=1.0, compute_fn=None, offset=0, keep_peak=True, second_response=False, second_peak=False):
+    def __init__(self, name, range=None, step=0.0, values=None, cyclic=False, value_offset=0.0, value_multiplier=1.0, compute_fn=None, offset=0, keep_peak=True):
          """
          Users can provide either a range and a step size, or a list of values.
          If a list of values is supplied, the range can be omitted unless the
@@ -620,23 +568,16 @@ class Feature(object):
 
          If supplied, the offset is added to the given or computed values to allow
          the starting value to be specified.
-
-	 If second_response is set, additional analysis is performed on values
-	 of this feature, that elicit the second maximum response in units.
-
-	 If second_peak is set, additional analysis is performed on values
-	 of this feature, that elicit the second peak response in units.
          """
          self.name=name
          self.cyclic=cyclic
          self.compute_fn=compute_fn
          self.range=range
          self.keep_peak=keep_peak
-         self.second_response=second_response
-         self.second_peak=second_peak
          self.value_offset=value_offset
          self.value_multiplier=value_multiplier
                  
+                             
          if values is not None:
              self.values=values if offset == 0 else [v+offset for v in values]
              if not self.range:
@@ -649,6 +590,7 @@ class Feature(object):
              self.values = values if offset == 0 else \
                            [(v+offset)%(up_bound-low_bound) if cyclic else (v+offset)
                             for v in values]
+
 
 
 class PatternPresenter(param.Parameterized):
@@ -709,25 +651,25 @@ class PatternPresenter(param.Parameterized):
         
     def __call__(self,features_values,param_dict):
         for param,value in param_dict.iteritems():
-            # CEBALERT: why not setattr(self.gen,param,value)
-            #if ('_'+param+'_param_value') not in self.gen.__dict__:
-            self.gen.__setattr__(param,value)                                
-                              
+           # CEBALERT: why not setattr(self.gen,param,value)
+           # CEBALERT: messed up spacing?
+           self.gen.__setattr__(param,value)
+               
         for feature,value in features_values.iteritems():
-            self.gen.__setattr__(feature,value)
-        
+           self.gen.__setattr__(feature,value)
+
         all_input_sheet_names = topo.sim.objects(GeneratorSheet).keys()
 
         if len(self.generator_sheets)>0:
             input_sheet_names = [sheet.name for sheet in self.generator_sheets]
         else:
             input_sheet_names = all_input_sheet_names
-        
+
         # Copy the given generator once for every GeneratorSheet
         inputs = dict.fromkeys(input_sheet_names)
         for k in inputs.keys():
             inputs[k]=copy.deepcopy(self.gen)
-        
+
         ### JABALERT: Should replace these special cases with general
         ### support for having meta-parameters controlling the
         ### generation of different patterns for each GeneratorSheet.
@@ -741,7 +683,7 @@ class PatternPresenter(param.Parameterized):
         ### should be able to provide general support for manipulating
         ### both pattern parameters and parameters controlling
         ### interaction between or differences between patterns.
-        
+
         if 'direction' in features_values:
             import __main__
             if '_new_motion_model' in __main__.__dict__ and __main__.__dict__['_new_motion_model']:
@@ -770,7 +712,8 @@ class PatternPresenter(param.Parameterized):
                     inputs[name] = Sweeper(generator=inputs[name],step=step,speed=speed)
                     setattr(inputs[name],'orientation',orientation)
             ##########################
-        
+
+
         if features_values.has_key('hue'):
 
             # could be three retinas (R, G, and B) or a single RGB
@@ -803,7 +746,8 @@ class PatternPresenter(param.Parameterized):
                     inputs[name] = rgbimages.ExtendToRGB(generator=inputs[name],
                                                          relative_channel_strengths=[r,g,b])
                 # CEBALERT: should warn as above if not a color network
-        
+
+
         #JL: This is only used for retinotopy measurement in jude laws contrib/jsldefs.py
         #Also needs cleaned up
         if features_values.has_key('retinotopy'):
@@ -841,7 +785,7 @@ class PatternPresenter(param.Parameterized):
             for name,i in zip(inputs.keys(),range(len(input_sheet_names))):
                 inputs[name].x = features_values['retx']
                 inputs[name].y = features_values['rety']           
-                
+          
         if features_values.has_key("phasedisparity"):
             temp_phase1=features_values['phase']-features_values['phasedisparity']/2.0
             temp_phase2=features_values['phase']+features_values['phasedisparity']/2.0
@@ -855,6 +799,7 @@ class PatternPresenter(param.Parameterized):
                         self.warning('Unable to measure disparity preference, because disparity is defined only when there are inputs for Right and Left retinas.')
                         self.disparity_warned=True
                 
+          
         ## Not yet used; example only
         #if features_values.has_key("xdisparity"):
         #    if len(input_sheet_names)!=2:
@@ -878,6 +823,7 @@ class PatternPresenter(param.Parameterized):
         #        inputs[input_sheet_names[0]]=inputs[input_sheet_names[0]]
         #        inputs[input_sheet_names[1]]=inputs[input_sheet_names[1]]
 
+
         if features_values.has_key("ocular"):
             for name in inputs.keys():
                 if (name.count('Right')):
@@ -893,6 +839,8 @@ class PatternPresenter(param.Parameterized):
                 for g in inputs.itervalues():
                     g.offsetcenter=0.5
                     g.scalecenter=2*g.offsetcenter*g.contrastcenter/100.0
+
+            
         
             elif self.contrast_parameter=='weber_contrast':
                 # Weber_contrast is currently only well defined for
@@ -903,16 +851,21 @@ class PatternPresenter(param.Parameterized):
                     g.offsetcenter=0.5   #In this case this is the offset of both the background and the sine grating
                     g.scalecenter=2*g.offsetcenter*g.contrastcenter/100.0
             
+                
             elif self.contrast_parameter=='scale':
                 for g in inputs.itervalues():
                     g.offsetcenter=0.0
                     g.scalecenter=g.contrastcenter
+
+
 
         if features_values.has_key("contrastsurround")or param_dict.has_key("contrastsurround"):
             if self.contrast_parameter=='michelson_contrast':
                 for g in inputs.itervalues():
                     g.offsetsurround=0.5
                     g.scalesurround=2*g.offsetsurround*g.contrastsurround/100.0
+
+            
         
             elif self.contrast_parameter=='weber_contrast':
                 # Weber_contrast is currently only well defined for
@@ -922,17 +875,22 @@ class PatternPresenter(param.Parameterized):
                 for g in inputs.itervalues():
                     g.offsetsurround=0.5   #In this case this is the offset of both the background and the sine grating
                     g.scalesurround=2*g.offsetsurround*g.contrastsurround/100.0
+            
                 
             elif self.contrast_parameter=='scale':
                 for g in inputs.itervalues():
                     g.offsetsurround=0.0
                     g.scalesurround=g.contrastsurround
-        
+
+
+
         if features_values.has_key("contrast") or param_dict.has_key("contrast"):
             if self.contrast_parameter=='michelson_contrast':
                 for g in inputs.itervalues():
                     g.offset=0.5
                     g.scale=2*g.offset*g.contrast/100.0
+
+            
         
             elif self.contrast_parameter=='weber_contrast':
                 # Weber_contrast is currently only well defined for
@@ -942,6 +900,7 @@ class PatternPresenter(param.Parameterized):
                 for g in inputs.itervalues():
                     g.offset=0.5   #In this case this is the offset of both the background and the sine grating
                     g.scale=2*g.offset*g.contrast/100.0
+            
                 
             elif self.contrast_parameter=='scale':
                 for g in inputs.itervalues():
@@ -951,9 +910,10 @@ class PatternPresenter(param.Parameterized):
         # blank patterns for unused generator sheets
         for sheet_name in set(all_input_sheet_names).difference(set(input_sheet_names)):
             inputs[sheet_name]=pattern.Constant(scale=0)
-                
+            
         pattern_present(inputs, self.duration, plastic=False,
                      apply_output_fns=self.apply_output_fns)
+
 
 
 class Subplotting(param.Parameterized):
@@ -1174,7 +1134,6 @@ class MeasureResponseCommand(ParameterizedFunction):
 
     def __call__(self,**params):
         """Measure the response to the specified pattern and store the data in each sheet."""
-
         p=ParamOverrides(self,params)
         x=FeatureMaps(self._feature_list(p),name="FeatureMaps_for_"+self.name,
                       sheet_views_prefix=p.sheet_views_prefix)

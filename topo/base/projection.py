@@ -49,8 +49,12 @@ class SheetMask(param.Parameterized):
         assert(self._sheet != None)
         return self._sheet
     def _set_sheet(self,sheet): 
-        self._sheet = sheet 
-        if(self._sheet != None): self.reset()
+        if sheet is not None:
+            self._sheet = sheet._copy_scs()
+            self._sheet.activity = sheet.activity
+            self.reset()
+        else:
+            self._sheet=None
     
     sheet = overridable_property(_get_sheet,_set_sheet)
     

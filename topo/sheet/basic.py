@@ -84,12 +84,15 @@ class SequenceGeneratorSheet(GeneratorSheet):
         self.event = PeriodicEventSequence(now+self.simulation._convert_to_time_type(self.phase),self.simulation._convert_to_time_type(self.period),event_seq)
         self.simulation.enqueue_event(self.event)
 
+#KK: commented out and replaced with another version
+#    to make the MPI code work
 
+""" 
 def compute_joint_norm_totals(projlist,active_units_mask=True):
-    """
+
     Compute norm_total for each CF in each projection from a group to
     be normalized jointly.
-    """
+
     # Assumes that all Projections in the list have the same r,c size
     assert len(projlist)>=1
     iterator = MaskedCFIter(projlist[0],active_units_mask=active_units_mask)
@@ -99,6 +102,39 @@ def compute_joint_norm_totals(projlist,active_units_mask=True):
         joint_sum = numpy.add.reduce(sums)
         for p in projlist:
             p.flatcfs[i].norm_total=joint_sum
+"""
+
+def compute_joint_norm_totals(projlist,active_units_mask=True):
+    """
+    Compute norm_total for each CF in each projection from a group to
+    be normalized jointly.
+    """
+    # Assumes that all Projections in the list have the same r,c size
+    # AND that all have the same mask
+    assert len(projlist)>=1
+    
+
+    norm_totals_data = []
+    norm_totals = []
+
+    
+    for p in projlist:
+        norm_totals_data.append(p.get_masked_norm_totals(active_units_mask=active_units_mask))
+    
+    for i in range(0,len(norm_totals_data[0])):
+        norm_totals.append([n[i] for n in norm_totals_data])
+    
+    new_norm_totals = []
+    
+    
+    
+    for n in norm_totals:
+        joint_sum = numpy.add.reduce(n)
+        new_norm_totals.append(joint_sum)
+
+
+    for p in projlist:
+        p.set_masked_norm_totals(new_norm_totals)
 
 
 class JointNormalizingCFSheet(CFSheet):

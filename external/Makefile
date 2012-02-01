@@ -1027,16 +1027,17 @@ guppy-uninstall:
 	rm -rf guppy $(foreach f, ${GUPPY_UNINSTALL}, ${PREFIX}/${f})
 
 
-
 #############################################################
 # OpenMPI
-OPENMPI = openmpi-1.3.3
+OPENMPI = openmpi-1.5.3
 
 # CEBALERT: uninstall info not complete!
 OPENMPI_UNINSTALL += lib/libmpi*
 OPENMPI_UNINSTALL += lib/openmpi
 OPENMPI_UNINSTALL += lib/mpi.mod
 OPENMPI_UNINSTALL += bin/mpi*
+OPENMPI_UNINSTALL += bin/vt*
+OPENMPI_UNINSTALL += lib/libvt*
 
 openmpi: ${OPENMPI}.tar.gz
 	tar -xzf ${OPENMPI}.tar.gz
@@ -1055,7 +1056,7 @@ openmpi-uninstall:
 #
 # 2009/11/03: Works on DICE ("make mpi4py-test" shows most tests passing)
 # 2009/11/03: Works on my Ubuntu 9.10 machine (tests pass similarly to above)
-MPI4PY = mpi4py-1.1.0
+MPI4PY = mpi4py-1.2.2
 
 MPI4PY_UNINSTALL += ${PYTHON_LIB}/site-packages/mpi4py
 MPI4PY_UNINSTALL += ${PYTHON_LIB}/site-packages/mpi4py*.egg*
@@ -1081,7 +1082,7 @@ mpi4py-uninstall:
 	rm -rf mpi4py $(foreach f, ${MPI4PY_UNINSTALL}, ${PREFIX}/${f})
 
 mpi4py-test: mpi4py
-	${PREFIX}/bin/mpiexec -n 2 ${PREFIX}/bin/python ${PREFIX}/external/mpi4py-1.1.0/test/runalltest.py
+	${PREFIX}/bin/mpiexec -n 2 ${PREFIX}/bin/python ${PREFIX}/external/${MPI4PY}/test/runalltest.py
 
 
 #############################################################
@@ -1102,7 +1103,7 @@ mpi4py-test: mpi4py
 # /usr/lib64/openmpi/1.2.7-gcc/bin) is in PATH before /usr/bin
 # (e.g. type "export PATH=/usr/lib/openmpi/1.2.7-gcc/bin:$PATH").
 
-MPI4PY_SYSTEMMPI = mpi4py-1.1.0
+MPI4PY_SYSTEMMPI = mpi4py-1.2.2
 
 MPI4PY_SYSTEMMPI_UNINSTALL += ${PYTHON_LIB}/site-packages/mpi4py
 MPI4PY_SYSTEMMPI_UNINSTALL += ${PYTHON_LIB}/site-packages/mpi4py*.egg*

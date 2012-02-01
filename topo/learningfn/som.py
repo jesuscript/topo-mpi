@@ -8,6 +8,8 @@ __version__ = "$Revision$"
 
 from math import ceil
 
+from numpy.oldnumeric import exp, argmax
+
 import param
 
 from topo.base.arrayutil import L2norm, array_argmax
@@ -16,6 +18,7 @@ from topo.base.cf import CFPLearningFn
 from topo.base.patterngenerator import PatternGenerator
     
 from topo.pattern.basic import Gaussian
+from topo.transferfn.basic import IdentityTF
 
 
 ### JABHACKALERT: This class will be removed once the examples no

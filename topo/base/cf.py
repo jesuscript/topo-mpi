@@ -23,10 +23,11 @@ __version__ = '$Revision$'
 
 from copy import copy
 
-from numpy import abs,array,zeros,where
+from numpy import abs,array,zeros,where,append
 from numpy.oldnumeric import Float,Float32
 
 import param
+from topo.misc import pmi
 
 import patterngenerator
 from patterngenerator import PatternGenerator
@@ -203,7 +204,7 @@ class ConnectionField(object):
         over the edge of the input sheet then the weights will
         actually be half-moon (or similar) rather than circular.
         """
-        #print "Create CF",input_sheet.name,x,y,"template=",template,"wg=",weights_generator,"m=",mask,"ofs=",output_fns,"min r=",min_matrix_radius
+
 
         template = copy(template)
 
@@ -553,6 +554,13 @@ class CFProjection(Projection):
 
     precedence = param.Number(default=0.8)
 
+    def get_dest_mask(self):
+        return self.dest.mask
+
+    # CFIter uses this function to get activity matrix. Overridden in MPI_CFProjection_node
+    def get_dest_activity_opt(self):
+        return self.dest.activity
+
 
     def __init__(self,initialize_cfs=True,**params):
         """
@@ -598,6 +606,9 @@ class CFProjection(Projection):
         ### happening
         self.input_buffer = None
         self.activity = array(self.dest.activity)
+
+        ### KKALERT! This is necessary for running topographica in serial mode 
+        self.allow_skip_non_responding_units = self.dest.allow_skip_non_responding_units
 
 
     def _generate_coords(self):
@@ -722,6 +733,7 @@ class CFProjection(Projection):
 
         If active_units_mask is True, inactive units will be skipped.
         """
+
         for of in self.weights_output_fns:
             of(MaskedCFIter(self,active_units_mask=active_units_mask))
 
@@ -753,6 +765,301 @@ class CFProjection(Projection):
         rows,cols=self.cfs.shape
         return sum([len((cf.mask if cf.mask is not None else cf.weights).ravel().nonzero()[0])
                     for cf,i in MaskedCFIter(self)()])
+
+    ## KKALERT: the following two functions were created in order to be used with
+    ## the non-optimised compute_joint_norm_totals, which makes sense only if running in MPI mode.
+    ## KKALERT: active_units_mask needs to be set explicitly (i.e. there's no default value) in
+    ## order to maintain the same mask as MaskedCFIter when used to iterate over norm_totals
+    def set_masked_norm_totals(self,norm_totals):
+        for (n,i) in zip(norm_totals,self.norm_total_posititions):
+            self.flatcfs[i].norm_total = n
+    def get_masked_norm_totals(self,active_units_mask):
+        iterator = MaskedCFIter(self,active_units_mask=active_units_mask)
+        self.norm_total_posititions = []
+        norm_totals = array([])
+        for (cf,i) in iterator():
+            self.norm_total_posititions.append(i)
+            norm_totals = append(norm_totals, cf.norm_total)
+
+        return norm_totals
+
+class MPI_CFProjection(CFProjection):
+    
+    # initialised initialized 
+    
+    # pmi.execfile_ should be called exactly once
+    pmi_initialised = param.Boolean(default=False)
+        
+    def __init__(self,initialize_cfs=True, **params):
+        self.pmiobj = pmi.create('MPI_CFProjection_node')
+        super(MPI_CFProjection,self).__init__(**params)
+        
+        self.init_activity(self.activity)
+        
+        self.mask = self.dest.mask
+        self.allow_skip_non_responding_units = self.dest.allow_skip_non_responding_units
+
+        self.set_dest_ref()
+        
+
+        
+    """>>>>>>>>>>>>>>>>>>>>>>>>> PROPERTIES >>>>>>>>>>>>>>>>>>>>>>>>>"""
+    
+    
+    def __set_flatcfs(self,flatcfs):
+        # It must be possible to avoid having two calls here (by somehow calling pmi from worker 0),
+        # but I couldn't figure out how. However, this is only a "cosmetic" issue anyway
+        pmi.localcall(self.pmiobj,'_set_flatcfs_ref',flatcfs)
+        pmi.call(self.pmiobj,'_set_flatcfs_chunk')
+    def __get_flatcfs(self):
+        flatcfs_list = pmi.invoke(self.pmiobj,'_get_flatcfs_chunk')
+        flatcfs = []
+        for flatcfs_row in flatcfs_list:
+            flatcfs.extend(flatcfs_row)
+        return copy(flatcfs)
+    def __del_flatcfs(self):
+        pmi.call(self.pmiobj,'_set_flatcfs_ref',None)
+    flatcfs = property(__get_flatcfs,__set_flatcfs,__del_flatcfs)
+    
+    
+    def __set_strength(self,strength):
+        pmi.call(self.pmiobj,'_set_strength',strength)
+    def __get_strength(self):
+        strength = pmi.call(self.pmiobj,'_get_strength')
+        return strength
+    def __del_strength(self):
+        pmi.call(self.pmiobj,'_set_strength',None)
+    strength = property(__get_strength,__set_strength,__del_strength)
+    
+    
+    def __set_n_units(self,n_units):
+        pmi.call(self.pmiobj,'_set_n_units',n_units)
+    def __get_n_units(self):
+        n_units =  pmi.call(self.pmiobj,'_get_n_units')
+
+        return n_units
+    def __del_n_units(self):
+        pmi.call(self.pmiobj,'_set_n_units',None)
+    n_units = property(__get_n_units,__set_n_units,__del_n_units)
+        
+        
+    def __set_allow_snru(self,allow):
+        pmi.call(self.pmiobj,'_set_allow_skip_non_responding_units',allow)
+    def __get_allow_snru(self):
+        snru = pmi.call(self.pmiobj,'_get_allow_skip_non_responding_units')
+        return snru
+    def __del_allow_snru(self):
+        pmi.call(self.pmiobj,'_set_allow_skip_non_responding_units',None)
+    allow_skip_non_responding_units = property(__get_allow_snru,__set_allow_snru,__del_allow_snru)
+
+
+    ## KKALERT! To cleanup the code a little bit and maybe speed it up a bit (though unlikely)
+    ## could replace the following code with on-node distribution (the same way it is done for
+    ## dest activity)
+    def __set_dest_mask(self,mask):
+        #flattening the mask matrix
+        self.mask_shape = mask.data.shape
+        #reshaping into one-dimensional matrix (2d matrix that has only one row)
+        pmi.call(self.pmiobj,'_set_dest_mask',mask)
+    def __get_dest_mask(self):
+        pmi.invoke(self.pmiobj,'_get_dest_mask')
+        mask_list = pmi.invoke(self.pmiobj,'_get_dest_mask')
+        mask = mask_list[0]
+        for mask_item in mask_list[1:]:
+            mask.data = append(mask.data, mask_item.data,1)
+        mask.data = mask.data.reshape(self.mask_shape[0],self.mask_shape[1])
+
+        return copy(mask)
+    def __del_dest_mask(self):
+        pmi.call(self.pmiobj,'_set_dest_mask',None)
+    mask = property(__get_dest_mask,__set_dest_mask,__del_dest_mask)
+
+    
+    
+    def __set_response_fn(self,response_fn):
+        pmi.call(self.pmiobj,'set_response_fn',response_fn)
+    def __get_response_fn(self):
+
+        return pmi.call(self.pmiobj,'get_response_fn')
+    def __del_response_fn(self):
+        pmi.call(self.pmiobj,'set_response_fn',None)
+    response_fn = property(__get_response_fn,__set_response_fn, __del_response_fn)
+
+    def __set_allow_null_cfs(self,allow_null_cfs):
+        pmi.call(self.pmiobj,'set_allow_null_cfs',allow_null_cfs)
+    def __get_allow_null_cfs(self):
+        return pmi.call(self.pmiobj,'get_allow_null_cfs')
+    def __del_allow_null_cfs(self):
+        pmi.call(self.pmiobj,'set_allow_null_cfs',None)
+    allow_null_cfs = property(__get_allow_null_cfs,__set_allow_null_cfs, __del_allow_null_cfs)
+    
+    def __set_nominal_bounds_template(self,nominal_bounds_template):
+        pmi.call(self.pmiobj,'set_nominal_bounds_template',nominal_bounds_template)
+    def __get_nominal_bounds_template(self):
+        return pmi.call(self.pmiobj,'get_nominal_bounds_template')
+    def __del_nominal_bounds_template(self):
+        pmi.call(self.pmiobj,'set_nominal_bounds_template',None)
+    nominal_bounds_template = property(__get_nominal_bounds_template,__set_nominal_bounds_template, __del_nominal_bounds_template)
+
+    def __set_cf_shape(self,cf_shape):
+        pmi.call(self.pmiobj,'set_cf_shape',cf_shape)
+    def __get_cf_shape(self):
+        return pmi.call(self.pmiobj,'get_cf_shape')
+    def __del_cf_shape(self):
+        pmi.call(self.pmiobj,'set_cf_shape',None)
+    cf_shape = property(__get_cf_shape,__set_cf_shape, __del_cf_shape)
+
+    def __set_scsfac(self,scsfac):
+        pmi.call(self.pmiobj,'set_scsfac',scsfac)
+    def __get_scsfac(self):
+        return pmi.call(self.pmiobj,'get_scsfac')
+    def __del_scsfac(self):
+        pmi.call(self.pmiobj,'set_scsfac',None)
+    same_cf_shape_for_all_cfs = property(__get_scsfac,__set_scsfac, __del_scsfac)
+
+    def __set_learning_fn(self,learning_fn):
+        pmi.call(self.pmiobj,'set_learning_fn',learning_fn)
+    def __get_learning_fn(self):
+        return pmi.call(self.pmiobj,'get_learning_fn')
+    def __del_learning_fn(self):
+        pmi.call(self.pmiobj,'set_learning_fn',None)
+    learning_fn = property(__get_learning_fn,__set_learning_fn, __del_learning_fn)
+
+    def __set_learning_rate(self,learning_rate):
+        pmi.call(self.pmiobj,'set_learning_rate',learning_rate)
+    def __get_learning_rate(self):
+        return pmi.call(self.pmiobj,'get_learning_rate')
+    def __del_learning_rate(self):
+        pmi.call(self.pmiobj,'set_learning_rate',None)
+    learning_rate = property(__get_learning_rate,__set_learning_rate, __del_learning_rate)
+
+    def __set_weights_output_fns(self,weights_output_fns):
+        pmi.call(self.pmiobj,'set_weights_output_fns',weights_output_fns)
+    def __get_weights_output_fns(self):
+        return pmi.call(self.pmiobj,'get_weights_output_fns')
+    def __del_weights_output_fns(self):
+        pmi.call(self.pmiobj,'set_weights_output_fns',None)
+    weights_output_fns = property(__get_weights_output_fns,__set_weights_output_fns, __del_weights_output_fns)
+
+    def __set_coord_mapper(self,coord_mapper):
+        pmi.call(self.pmiobj,'set_coord_mapper',coord_mapper)
+    def __get_coord_mapper(self):
+        return pmi.call(self.pmiobj,'get_coord_mapper')
+    def __del_coord_mapper(self):
+        pmi.call(self.pmiobj,'set_coord_mapper',None)
+    coord_mapper = property(__get_coord_mapper,__set_coord_mapper, __del_coord_mapper)
+    
+    def __set_autosize_mask(self,autosize_mask):
+        pmi.call(self.pmiobj,'set_autosize_mask',autosize_mask)
+    def __get_autosize_mask(self):
+        return pmi.call(self.pmiobj,'get_autosize_mask')
+    def __del_autosize_mask(self):
+        pmi.call(self.pmiobj,'set_autosize_mask',None)
+    autosize_mask = property(__get_autosize_mask,__set_autosize_mask, __del_autosize_mask)
+    
+    def __set_mask_threshold(self,mask_threshold):
+        pmi.call(self.pmiobj,'set_mask_threshold',mask_threshold)
+    def __get_mask_threshold(self):
+        return pmi.call(self.pmiobj,'get_mask_threshold')
+    def __del_mask_threshold(self):
+        pmi.call(self.pmiobj,'set_mask_threshold',None)
+    mask_threshold = property(__get_mask_threshold,__set_mask_threshold, __del_mask_threshold)
+    
+    def __set_apply_output_fns_init(self,apply_output_fns_init):
+        pmi.call(self.pmiobj,'set_apply_output_fns_init',apply_output_fns_init)
+    def __get_apply_output_fns_init(self):
+        return pmi.call(self.pmiobj,'get_apply_output_fns_init')
+    def __del_apply_output_fns_init(self):
+        pmi.call(self.pmiobj,'set_apply_output_fns_init',None)
+    apply_output_fns_init = property(__get_apply_output_fns_init,__set_apply_output_fns_init, __del_apply_output_fns_init)
+
+
+    def __set_min_matrix_radius(self,min_matrix_radius):
+        pmi.call(self.pmiobj,'set_min_matrix_radius',min_matrix_radius)
+    def __get_min_matrix_radius(self):
+        ## !KKUFOALERT: replacing the following invoke with call, localcall or simply removing the whole property
+        ## from MPI_CFProjection (as it does not need to be here really) and trying to simulate tiny_mpi with cortex_density
+        ## between 25 and 40 sometimes (!) freezes the simulation on distributing connection fields with set_flatcfs (WTF?!)
+        return pmi.invoke(self.pmiobj,'get_min_matrix_radius')[0]
+    def __del_min_matrix_radius(self):
+        pmi.call(self.pmiobj,'set_min_matrix_radius',None)
+    min_matrix_radius = property(__get_min_matrix_radius,__set_min_matrix_radius, __del_min_matrix_radius)
+
+    def __set_fake_src(self,fake_src):
+        pmi.call(self.pmiobj,'set_fake_src',fake_src)
+    def __get_fake_src(self):
+        return pmi.call(self.pmiobj,'get_fake_src')
+    def __del_fake_src(self):
+        pmi.call(self.pmiobj,'set_fake_src',None)
+    fake_src = property(__get_fake_src,__set_fake_src,__del_fake_src)
+ 
+    def __set_mask_template(self,mask_template):
+        pmi.call(self.pmiobj,'set_mask_template',mask_template)
+    def __get_mask_template(self):
+        return pmi.call(self.pmiobj,'get_mask_template')
+    def __del_mask_template(self):
+        pmi.call(self.pmiobj,'set_mask_template',None)
+    mask_template = property(__get_mask_template,__set_mask_template,__del_mask_template)
+
+    def __set__slice_template(self,_slice_template):
+        pmi.call(self.pmiobj,'set__slice_template',_slice_template)
+    def __get__slice_template(self):
+        return pmi.call(self.pmiobj,'get__slice_template')
+    def __del__slice_template(self):
+        pmi.call(self.pmiobj,'set__slice_template',None)
+    _slice_template = property(__get__slice_template,__set__slice_template,__del__slice_template)
+
+   
+
+    """<<<<<<<<<<<<<<<<<<<<<<<<< PROPERTIES <<<<<<<<<<<<<<<<<<<<<<<<<"""
+    def set_dest_ref(self):
+        # KKALERT! has to be a local call in order not to pickle dest (it's only processed by node 0
+        # anyway). Pickling dest results in unpredictable behaviour and mountains of debugging!
+        pmi.localcall(self.pmiobj,"set_dest",self.dest)
+    
+    
+
+    def get_masked_norm_totals(self, active_units_mask):
+        norm_totals_list = pmi.invoke(self.pmiobj,"get_masked_norm_totals",active_units_mask)
+        norm_totals = numpy.array([])
+        for n in norm_totals_list:
+            norm_totals = numpy.append(norm_totals, n)
+        return norm_totals
+    def set_masked_norm_totals(self, norm_totals):
+        pmi.invoke(self.pmiobj,"set_masked_norm_totals",numpy.array(norm_totals))
+        
+    
+    def get_dest_mask(self):
+        return self.mask
+    
+    
+    def __init_activity(self):
+        print "__init_activity(self): METHOD STUB"
+        
+    def activate(self, input_activity):
+        pmi.invoke_opt(pmiobj=self.pmiobj,fn_name='activate',data=input_activity,rbuf=self.activity_rbuf)
+        self.activity.flat[:] = self.activity_rbuf[0]
+
+        """
+        self.activity = numpy.array([])
+        for activity_row in activity_list:
+            self.activity = numpy.append(self.activity, activity_row)
+        self.activity = self.activity.reshape(self.activity_shape[0],self.activity_shape[1])
+        """
+
+
+    def init_activity(self,activity):
+        self.activity = activity
+        self.activity_rbuf = pmi.call(self.pmiobj,'_set_activity',activity)
+        #for efficient MPI comms
+
+        
+    def learn(self):
+        pmi.call(self.pmiobj,'learn')
+
+
+    def apply_learn_output_fns(self,active_units_mask=True):
+        pmi.invoke(self.pmiobj,'apply_learn_output_fns', active_units_mask)
 
 
 # CEB: have not yet decided proper location for this method
@@ -802,11 +1109,12 @@ class CFIter(object):
     def __init__(self,cfprojection,active_units_mask=False,ignore_sheet_mask=False):
 
         self.flatcfs = cfprojection.flatcfs
-        self.activity = cfprojection.dest.activity
-        self.mask = cfprojection.dest.mask
+
+        self.activity = cfprojection.get_dest_activity_opt()
+        self.mask = cfprojection.get_dest_mask()
         self.cf_type = cfprojection.cf_type
         self.proj_n_units = cfprojection.n_units
-        self.allow_skip_non_responding_units = cfprojection.dest.allow_skip_non_responding_units
+        self.allow_skip_non_responding_units = cfprojection.allow_skip_non_responding_units
 
         self.active_units_mask = active_units_mask
         self.ignore_sheet_mask = ignore_sheet_mask
