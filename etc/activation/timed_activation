@@ -1,0 +1,45 @@
+#!/bin/bash
+
+usage()
+{
+cat << EOF
+usage: $0 options
+
+OPTIONS:
+-m sheet height 
+-n sheet width
+-i number of iterations
+EOF
+}
+
+M=50
+N=50
+ITERATIONS=10
+N_CPU=1
+
+while getopts "m:n:i:p:" OPTION
+do
+  case $OPTION in
+      m)
+	  M=$OPTARG
+	  ;;
+      n)
+	  N=$OPTARG
+	  ;;
+      i)
+	  ITERATIONS=$OPTARG
+	  ;;
+      p)
+	  N_CPU=$OPTARG
+	  ;;
+      esac
+done
+
+#t=$(/usr/bin/time -p /afs/inf.ed.ac.uk/user/s06/s0676011/CODE/topographica/bin/mpiexec -n $N_CPU --hostfile hostfile --bynode ./activation $M $N $ITERATIONS "timings.$N_CPU.xml" 2>&1)
+
+
+t=$(/usr/bin/time -p mpiexec -n $N_CPU ./activation $M $N $ITERATIONS "timings.xml" 2>&1)
+
+
+python parsetime.py "$t" "timings.xml"
+

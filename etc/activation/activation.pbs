@@ -1,0 +1,28 @@
+#!/bin/bash --login
+#PBS -N activation.pbs
+#PBS -l mppwidth=24
+#PBS -l mppnppn=24
+#PBS -l walltime=00:10:00
+#PBS -j oe
+#PBS -A d04
+  
+# Change to the direcotry that the job was submitted from
+cd $PBS_O_WORKDIR
+
+
+M=100
+N=100
+ITERATIONS=1000
+
+
+
+N_CPU=24
+N_CPU_PN=24
+
+
+t=$(/usr/bin/time -p aprun -n $N_CPU -N $N_CPU_PN ./activation $M $N $ITERATIONS "timings.xml" 2>&1)
+
+echo $t
+
+python parsetime.py "$t" "timings.xml"
+
