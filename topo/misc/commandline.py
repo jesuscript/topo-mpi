@@ -335,6 +335,16 @@ topo_parser.add_option("-l","--legacy",action="callback",callback=l_action,dest=
 launch Topographica with legacy support enabled.""")
 
 
+
+def mpi_action(option, opt_str, value, parser):
+    from topo.misc import pmi
+    #print "Enabling MPI support through PMI" 
+    pmi.setup()
+
+topo_parser.add_option("--mpi",action="callback",callback=mpi_action,dest="mpi",default=False,help="""\
+launch Topographica with MPI support enabled.""")
+
+
 def gui(start=True):
     """Start the GUI as if -g were supplied in the command used to launch Topographica."""
     if matplotlib_imported: 
