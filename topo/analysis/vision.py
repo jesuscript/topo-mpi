@@ -5,27 +5,34 @@ $Id: featureresponses.py 7714 2008-01-24 16:42:21Z antolikjan $
 """
 __version__='$Revision: 7714 $'
 
-from math import fmod,floor,pi,sin,cos,sqrt
+from math import pi,sin,cos
 
 import numpy
 from numpy.oldnumeric import Float
-from numpy import zeros, array, size, empty, object_
+from numpy import zeros, array, size, object_
 #import scipy
 
+import param
+from param import normalize_path
+
 try:
+    import matplotlib
     import pylab
 except ImportError:
-    print "Warning: Could not import matplotlib; pylab plots will not work."
+    param.Parameterized(name=__name__).warning("Could not import matplotlib; module will not be useable.")
+    from topo.command.basic import ImportErrorRaisingFakeModule
+    pylab = ImportErrorRaisingFakeModule("matplotlib")
 
-import param
+# CEBALERT: commands in here should inherit from the appropriate base
+# class (Command or PylabPlotCommand).
 
 import topo
 from topo.base.cf import CFSheet
 from topo.base.sheetview import SheetView
-from topo.misc.filepath import normalize_path
-from topo.misc.numbergenerator import UniformRandom
-from topo.plotting.plotgroup import create_plotgroup, plotgroups
+from topo.plotting.plotgroup import create_plotgroup
 from topo.command.analysis import measure_sine_pref
+
+from topo import numbergen
 
 max_value = 0
 global_index = ()
@@ -93,16 +100,28 @@ def complexity(full_matrix):
                 res = res + abs(full_matrix.full_matrix[tuple(iindex.tolist())][x][y] - average)
                 complex_matrix[x,y] = complex_matrix[x,y] + [full_matrix.full_matrix[tuple(iindex.tolist())][x][y]]
 
-            #this is taking away the DC component
-            #complex_matrix[x,y] -= numpy.min(complex_matrix[x,y])
-            if x==15 and y==15:
+            if x==43 and y==43:
                 pylab.figure()
-                pylab.plot(complex_matrix[x,y])
-            if x==26 and y==26:
+		ax = pylab.subplot(111)
+		z = complex_matrix[x,y][:]
+		z.append(z[0])
+                pylab.plot(z,linewidth=4)
+		pylab.axis(xmin=0.0,xmax=numpy.pi)
+		ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
+		pylab.xticks([0,len(z)/2,len(z)-1], ['0','pi/2','pi'])
+		pylab.savefig(normalize_path(str(topo.sim.time()) + str(complex_matrix[x,y][0])+ 'modulation_response[43,43].png'))
+
+            if x==45 and y==45:
                 pylab.figure()
-                pylab.plot(complex_matrix[x,y])
- 
-            #complexity[x,y] = res / (2*sum)
+		ax = pylab.subplot(111)
+		z = complex_matrix[x,y][:]
+		z.append(z[0])
+                pylab.plot(z,linewidth=4)
+		pylab.axis(xmin=0.0,xmax=numpy.pi)
+		ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
+		pylab.xticks([0,len(z)/2,len(z)-1], ['0','pi/2','pi'])
+		pylab.savefig(normalize_path(str(topo.sim.time()) + str(complex_matrix[x,y][0])+ 'modulation_response[45,45].png'))
+		
             fft = numpy.fft.fft(complex_matrix[x,y]+complex_matrix[x,y]+complex_matrix[x,y]+complex_matrix[x,y],2048)
             first_har = 2048/len(complex_matrix[0,0])
             if abs(fft[0]) != 0:
@@ -154,7 +173,7 @@ def compute_ACDC_orientation_tuning_curves(full_matrix,curve_label,sheet):
 
 
 def phase_preference_scatter_plot(sheet_name,diameter=0.39):
-    r = UniformRandom(seed=1023)
+    r = numbergen.UniformRandom(seed=1023)
     preference_map = topo.sim[sheet_name].sheet_views['PhasePreference']
     offset_magnitude = 0.03
     datax = []
@@ -199,7 +218,7 @@ def phase_preference_scatter_plot(sheet_name,diameter=0.39):
 
 ###############################################################################
 # JABALERT: Should we move this plot and command to analysis.py or
-# pylabplots.py, where all the rest are?
+# pylabplot.py, where all the rest are?
 #
 # In any case, it requires generalization; it should not be hardcoded
 # to any particular map name, and should just do the right thing for
@@ -241,8 +260,8 @@ def analyze_complexity(full_matrix,simple_sheet_name,complex_sheet_name,filename
         complx = array(complexity(full_matrix[sheet]))/2.0 
         # Should this be renamed to ModulationRatio?
         sheet.sheet_views['ComplexSelectivity']=SheetView((complx,sheet.bounds), sheet.name , sheet.precedence, topo.sim.time(),sheet.row_precedence)
-    import topo.command.pylabplots
-    topo.command.pylabplots.plot_modulation_ratio(full_matrix,simple_sheet_name=simple_sheet_name,complex_sheet_name=complex_sheet_name,filename=filename)
+    import topo.command.pylabplot
+    topo.command.pylabplot.plot_modulation_ratio(full_matrix,simple_sheet_name=simple_sheet_name,complex_sheet_name=complex_sheet_name,filename=filename)
 
     # Avoid error if no simple sheet exists
     try:
