@@ -37,7 +37,7 @@ endif
 
 
 # if 0, skips building tk and related external packages
-GUI = 1
+GUI = 0
 
 # set to empty when building 'release' debs.
 DEBSTATUS = -unstable
